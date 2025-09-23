@@ -5,36 +5,53 @@ import jwt from 'jsonwebtoken';
 import { pool } from '../config/db.js';
 const router = Router();
 // POST /api/auth/register
-router.post('/register',[
-  body('name').notEmpty(),
-  body('email').isEmail(),
-  body('password').isLength({min:6}),
-  body('role').isIn(['USER','PROVIDER','ADMIN'])
-], async (req,res)=>{
-  const errors = validationResult(req);
-  if(!errors.isEmpty()) return res.status(400).json({errors: errors.array()});
-  const {name,email,password,role} = req.body;
-  const [rows] = await pool.query('SELECT id FROM users WHERE email=?',[email]);
-  if(rows.length) return res.status(409).json({message:'Email ya registrado'});
-  const hash = await bcrypt.hash(password,10);
-  const [result] = await pool.query('INSERT INTO users (name,email,password_hash,role) VALUES (?,?,?,?)',[name,email,hash,role]);
-  const token = jwt.sign({id: result.insertId, role}, process.env.JWT_SECRET, {expiresIn:'12h'});
-  res.status(201).json({token});
+router.post('/register', async (req, res) => {
+  try {
+    const {
+      name,
+      lastName,
+      email,
+      password,
+      role = 'USER',
+      documentType = 'CC',
+      address = '',
+      phone = ''
+    } = req.body || {};
+
+    if (!name || name.trim().length < 2) return res.status(400).json({ message: 'Nombre inválido' });
+    if (!lastName || lastName.trim().length < 2) return res.status(400).json({ message: 'Apellido inválido' });
+    if (!/.+@.+\..+/.test(email)) return res.status(400).json({ message: 'Email inválido' });
+    if (!password || password.length < 6) return res.status(400).json({ message: 'Contraseña muy corta' });
+
+    const rolesOk = ['USER','PROVIDER','ADMIN'];
+    if (!rolesOk.includes(role)) return res.status(400).json({ message: 'Rol inválido' });
+
+    const docsOk = ['CC','CE','PA','NIT'];
+    if (!docsOk.includes(documentType)) return res.status(400).json({ message: 'Tipo de documento inválido' });
+
+    const phoneDigits = String(phone || '').replace(/\D/g, '');
+    if (phoneDigits && phoneDigits.length < 8) return res.status(400).json({ message: 'Celular inválido' });
+    if (address && address.trim().length < 5) return res.status(400).json({ message: 'Dirección inválida' });
+
+    const [existing] = await db.query('SELECT id FROM users WHERE email=? LIMIT 1', [email]);
+    if (existing.length) return res.status(409).json({ message: 'Email ya registrado' });
+
+    const hash = await bcrypt.hash(password, 10);
+
+    const [result] = await db.query(
+      'INSERT INTO users (name, last_name, email, password_hash, role, document_type, address, phone) VALUES (?,?,?,?,?,?,?,?)',
+      [name.trim(), lastName.trim(), email.trim(), hash, role, documentType, address.trim(), phoneDigits]
+    );
+
+    res.status(201).json({
+      id: result.insertId,
+      name, lastName, email, role, documentType,
+      address, phone: phoneDigits
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Error en registro' });
+  }
 });
-// POST /api/auth/login
-router.post('/login',[
-  body('email').isEmail(),
-  body('password').notEmpty()
-], async (req,res)=>{
-  const errors = validationResult(req);
-  if(!errors.isEmpty()) return res.status(400).json({errors: errors.array()});
-  const {email,password} = req.body;
-  const [rows] = await pool.query('SELECT * FROM users WHERE email=?',[email]);
-  if(!rows.length) return res.status(401).json({message:'Credenciales inválidas'});
-  const user = rows[0];
-  const ok = await bcrypt.compare(password, user.password_hash);
-  if(!ok) return res.status(401).json({message:'Credenciales inválidas'});
-  const token = jwt.sign({id: user.id, role: user.role}, process.env.JWT_SECRET, {expiresIn:'12h'});
-  res.json({token, role:user.role, name:user.name});
-});
+
 export default router;

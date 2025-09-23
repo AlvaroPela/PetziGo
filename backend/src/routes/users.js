@@ -20,4 +20,5 @@ router.put('/me', authRequired(['USER','PROVIDER','ADMIN']), [
   await pool.query('UPDATE users SET name=COALESCE(?,name), phone=COALESCE(?,phone), address=COALESCE(?,address) WHERE id=?',[name,phone,address,req.user.id]);
   res.json({ok:true});
 });
+
 export default router;
