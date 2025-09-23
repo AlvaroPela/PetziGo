@@ -7,65 +7,68 @@ const router = Router();
 
 router.get('/', async (_req, res) => {
   const [rows] = await pool.query(
-    `SELECT s.id, s.title, s.description, s.price, s.available, s.visible,
+    `SELECT p.id, p.name, p.description, p.price, p.stock, p.visible,
             u.name AS providerName, u.company_name AS companyName
-     FROM services s
-     JOIN users u ON u.id = s.provider_id
-     WHERE s.active = 1 AND s.visible = 1 AND u.status = 'ACTIVE'`
+     FROM products p
+     JOIN users u ON u.id = p.provider_id
+     WHERE p.visible = 1 AND u.status = 'ACTIVE'`
   );
   res.json(rows);
 });
 
 router.get('/mine', authRequired('PROVIDER'), async (req, res) => {
   const [rows] = await pool.query(
-    `SELECT id, title, description, price, available, active, visible,
-            created_at AS createdAt, updated_at AS updatedAt
-     FROM services WHERE provider_id = ? ORDER BY created_at DESC`,
+    `SELECT id, name, description, price, stock, visible, created_at AS createdAt, updated_at AS updatedAt
+     FROM products WHERE provider_id = ? ORDER BY created_at DESC`,
     [req.user.id]
   );
   res.json(rows);
 });
 
-const serviceValidations = [
-  body('title').trim().notEmpty().withMessage('El titulo es obligatorio'),
+const productValidations = [
+  body('name').trim().notEmpty().withMessage('El nombre es obligatorio'),
   body('description').trim().notEmpty().withMessage('La descripcion es obligatoria'),
   body('price').isFloat({ min: 0 }).withMessage('El precio debe ser un numero positivo'),
-  body('available').optional().isBoolean().withMessage('Disponible debe ser booleano'),
+  body('stock').optional().isInt({ min: 0 }).withMessage('El stock debe ser un entero positivo'),
   body('visible').optional().isBoolean().withMessage('Visible debe ser booleano')
 ];
 
-router.post('/', authRequired('PROVIDER'), serviceValidations, async (req, res) => {
+router.post('/', authRequired('PROVIDER'), productValidations, async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
-  const { title, description, price, available = true, visible = true } = req.body;
+
+  const { name, description, price, stock = 0, visible = true } = req.body;
   const [result] = await pool.query(
-    `INSERT INTO services (provider_id, title, description, price, available, active, visible)
-     VALUES (?, ?, ?, ?, ?, 1, ?)` ,
-    [req.user.id, title, description, price, available ? 1 : 0, visible ? 1 : 0]
+    `INSERT INTO products (provider_id, name, description, price, stock, visible)
+     VALUES (?, ?, ?, ?, ?, ?)` ,
+    [req.user.id, name, description, price, stock, visible ? 1 : 0]
   );
   res.status(201).json({ id: result.insertId });
 });
 
 router.put('/:id', authRequired('PROVIDER'), [
   param('id').isInt({ min: 1 }),
-  ...serviceValidations
+  ...productValidations
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
+
   const { id } = req.params;
-  const { title, description, price, available = true, visible = true } = req.body;
-  const [ownership] = await pool.query('SELECT id FROM services WHERE id = ? AND provider_id = ?', [id, req.user.id]);
+  const { name, description, price, stock = 0, visible = true } = req.body;
+
+  const [ownership] = await pool.query('SELECT id FROM products WHERE id = ? AND provider_id = ?', [id, req.user.id]);
   if (!ownership.length) {
-    return res.status(404).json({ message: 'Servicio no encontrado' });
+    return res.status(404).json({ message: 'Producto no encontrado' });
   }
+
   await pool.query(
-    `UPDATE services SET title = ?, description = ?, price = ?, available = ?, visible = ?, updated_at = NOW()
+    `UPDATE products SET name = ?, description = ?, price = ?, stock = ?, visible = ?, updated_at = NOW()
      WHERE id = ?`,
-    [title, description, price, available ? 1 : 0, visible ? 1 : 0, id]
+    [name, description, price, stock, visible ? 1 : 0, id]
   );
   res.json({ ok: true });
 });
@@ -78,13 +81,15 @@ router.patch('/:id/visibility', authRequired('PROVIDER'), [
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
+
   const { id } = req.params;
   const { visible } = req.body;
-  const [ownership] = await pool.query('SELECT id FROM services WHERE id = ? AND provider_id = ?', [id, req.user.id]);
+  const [ownership] = await pool.query('SELECT id FROM products WHERE id = ? AND provider_id = ?', [id, req.user.id]);
   if (!ownership.length) {
-    return res.status(404).json({ message: 'Servicio no encontrado' });
+    return res.status(404).json({ message: 'Producto no encontrado' });
   }
-  await pool.query('UPDATE services SET visible = ?, updated_at = NOW() WHERE id = ?', [visible ? 1 : 0, id]);
+
+  await pool.query('UPDATE products SET visible = ?, updated_at = NOW() WHERE id = ?', [visible ? 1 : 0, id]);
   res.json({ ok: true, visible });
 });
 
@@ -94,12 +99,12 @@ router.delete('/:id', authRequired('PROVIDER'), [param('id').isInt({ min: 1 })],
     return res.status(400).json({ errors: errors.array() });
   }
   const { id } = req.params;
-  const [ownership] = await pool.query('SELECT id FROM services WHERE id = ? AND provider_id = ?', [id, req.user.id]);
+  const [ownership] = await pool.query('SELECT id FROM products WHERE id = ? AND provider_id = ?', [id, req.user.id]);
   if (!ownership.length) {
-    return res.status(404).json({ message: 'Servicio no encontrado' });
+    return res.status(404).json({ message: 'Producto no encontrado' });
   }
-  await pool.query('UPDATE services SET active = 0, visible = 0, updated_at = NOW() WHERE id = ?', [id]);
-  res.json({ ok: true });
+  await pool.query('DELETE FROM products WHERE id = ?', [id]);
+  res.status(204).send();
 });
 
 export default router;
