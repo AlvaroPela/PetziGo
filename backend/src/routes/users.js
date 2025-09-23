@@ -94,6 +94,7 @@ router.put('/me', authRequired(BASE_ROLES), updateValidations, async (req, res) 
   res.json({ ok: true, updated: updates.length });
 });
 
+<<<<<<< HEAD
 router.get('/', authRequired('ADMIN'), [
   query('role').optional().isIn(BASE_ROLES),
   query('status').optional().isIn(['ACTIVE', 'INACTIVE']),
@@ -162,4 +163,6 @@ router.patch('/:id/documents', authRequired('ADMIN'), [
   res.json({ ok: true, documentsStatus });
 });
 
+=======
+>>>>>>> 3e6971130581253461d0d17cb395530a99e019a6
 export default router;
