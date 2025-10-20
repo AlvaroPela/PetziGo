@@ -88,7 +88,7 @@ router.post('/register', async (req, res) => {
     const hash = await bcrypt.hash(password, 10);
     const [result] = await pool.query(
       `INSERT INTO users
-        (name, email, password_hash, role, user_type, address, phone, legal_rep_name, company_name, nit, document_type)
+        (name, email, password_hash, role, user_type, address, phone, legal_representative, company_name, nit, document_type)
        VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
       [
         name.trim(),

@@ -1,8 +1,14 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import { authRequired } from './middleware/auth.js';
 
 const app = express();
+
+app.use((req, _res, next) => {
+  console.log('--- REQUEST HEADER ---', req.method, req.originalUrl);
+  next();
+});
 
 app.use(express.json());
 app.use(

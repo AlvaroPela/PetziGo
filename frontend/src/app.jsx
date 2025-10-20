@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from "react";
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000/api";
 
 async function api(path, { method = "GET", body, token } = {}) {
+
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers: {
@@ -87,6 +88,7 @@ function useAuth() {
 
   const fetchMe = async (overrideToken) => {
     const activeToken = overrideToken ?? token;
+    console.log("activeToken: ", activeToken)
     if (!activeToken) {
       setUser(null);
       setLoading(false);
@@ -94,7 +96,7 @@ function useAuth() {
     }
     setLoading(true);
     try {
-      const me = await api("/users/me", { token: activeToken });
+      const me = await api("/users/me", { token: activeToken });      
       setUser(me);
     } catch (err) {
       console.error(err);
@@ -471,6 +473,7 @@ function LoginScreen({ auth, onDone, goRegister }) {
 function Dashboard({ auth }) {
   const [me, setMe] = useState(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -478,6 +481,8 @@ function Dashboard({ auth }) {
       setError("");
       try {
         const data = await api("/orders", { token: auth.token });
+        const meRes = 
+        console.log("ordes: ", data)
         setOrders(Array.isArray(data) ? data : []);
       } catch (err) {
         setError(err.message);

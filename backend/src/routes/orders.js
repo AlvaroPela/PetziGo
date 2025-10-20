@@ -126,7 +126,7 @@ router.get('/me', authRequired(['USER', 'PROVIDER']), filterValidations, async (
   res.json(rows);
 });
 
-router.get('/', authRequired('ADMIN'), filterValidations, async (req, res) => {
+router.get('/', authRequired(['ADMIN', 'USER']), filterValidations, async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
