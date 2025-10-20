@@ -1,0 +1,56 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: petzigo-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: petzigo
+      MYSQL_ROOT_PASSWORD: 123
+    volumes:
+      - db_data:/var/lib/mysql
+      # Inicializa la BD con tu schema.sql al arrancar (solo la primera vez)
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: petzigo-backend
+    env_file:
+      - ./backend/.env
+    ports:
+      - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/usr/src/app:cached
+      - /usr/src/app/node_modules
+    command: sh -c "npm install --no-audit --no-fund && npm run dev"
+    # si usas nodemon en dev, npm run dev puede recargar al cambiar código
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: petzigo-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      - ./frontend:/usr/src/app:cached
+      - /usr/src/app/node_modules
+    command: sh -c "npm install --no-audit --no-fund && npm start"
+
+volumes:
+  db_data:
