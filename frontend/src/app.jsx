@@ -1,30 +1,6 @@
-
 import React, { useEffect, useMemo, useState } from "react";
-
-/* ========= API helper ========= */
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000/api";
-
-async function api(path, { method = "GET", body, token } = {}) {
-
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  const data = await res.json().catch(() => null);
-
-  if (!res.ok) {
-    const message = data?.message || data?.error || `HTTP ${res.status}`;
-    throw new Error(message);
-  }
-
-  return data;
-}
-
+import { useAuth } from "./auth/AuthProvider"; // ruta según tu proyecto
+import { api } from "./lib/api";
 
 function Input({ label, type = "text", value, onChange, placeholder, required, autoComplete }) {
   return (
@@ -79,62 +55,6 @@ function Card({ title, description, actions, children }) {
       <div className="space-y-4">{children}</div>
     </div>
   );
-}
-
-function useAuth() {
-  const [token, setToken] = useState(() => localStorage.getItem("token") || "");
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(!!token);
-
-  const fetchMe = async (overrideToken) => {
-    const activeToken = overrideToken ?? token;
-    console.log("activeToken: ", activeToken)
-    if (!activeToken) {
-      setUser(null);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const me = await api("/users/me", { token: activeToken });      
-      setUser(me);
-    } catch (err) {
-      console.error(err);
-      localStorage.removeItem("token");
-      setToken("");
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (token) {
-      fetchMe(token);
-    } else {
-      setUser(null);
-      setLoading(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
-
-  const login = async (email, password) => {
-    const data = await api("/auth/login", { method: "POST", body: { email, password } });
-    localStorage.setItem("token", data.token);
-    setToken(data.token);
-    await fetchMe(data.token);
-    return data;
-  };
-
-  const register = (payload) => api("/auth/register", { method: "POST", body: payload });
-
-  const logout = () => {
-    localStorage.removeItem("token");
-    setToken("");
-    setUser(null);
-  };
-
-  return { token, user, loading, login, register, logout, refresh: fetchMe };
 }
 
 function useCart() {
@@ -470,30 +390,47 @@ function LoginScreen({ auth, onDone, goRegister }) {
 }
 
 
-function Dashboard({ auth }) {
-  const [me, setMe] = useState(null);
+function Dashboard() {
+  const { user, token, refresh } = useAuth();
+  const [me, setMe] = useState(user || null);
+  const [orders, setOrders] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
     const load = async () => {
       setLoading(true);
       setError("");
       try {
-        const data = await api("/orders", { token: auth.token });
-        const meRes = 
-        console.log("ordes: ", data)
-        setOrders(Array.isArray(data) ? data : []);
+        // 1) obtener el "me" (si no viene del contexto, pedir refresh que devuelve el usuario)
+        const meRes = user || (await refresh()); // refresh() devuelve la info o null
+        if (mounted) setMe(meRes);
+
+        // 2) obtener órdenes (usa token; api() también toma token de localStorage si no se pasa)
+        if (!token) {
+          throw new Error("No autenticado");
+        }
+        const data = await api("/orders", { token });
+        if (mounted) setOrders(Array.isArray(data) ? data : []);
       } catch (err) {
-        setError(err.message);
+        console.error("Dashboard load error:", err);
+        if (mounted) setError(err.message || "Error cargando datos");
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
-    load();
-  }, [auth.token]);
 
-  if (!auth.token) return (
+    if (token) load();
+    else {
+      setMe(null);
+      setOrders([]);
+    }
+
+    return () => { mounted = false; };
+  }, [token, user, refresh]);
+
+  if (!token) return (
     <Card title="Dashboard">
       <p className="text-gray-600">Debes iniciar sesión para ver esta sección.</p>
     </Card>
@@ -502,17 +439,27 @@ function Dashboard({ auth }) {
   return (
     <Card title="Dashboard">
       {error && <p className="text-sm text-red-600">{error}</p>}
-      {me ? (
-        <div className="space-y-2">
-          <p><span className="font-medium">Nombre:</span> {me.name}</p>
-          <p><span className="font-medium">Email:</span> {me.email}</p>
-          <p><span className="font-medium">Rol:</span> {me.role}</p>
-          <div className="flex gap-2 pt-2">
-            <button onClick={() => auth.refresh()} className="rounded-xl bg-gray-100 px-3 py-2 hover:bg-gray-200">Refrescar</button>
+      {loading ? <p>Cargando…</p> : (
+        me ? (
+          <div className="space-y-2">
+            <p><span className="font-medium">Nombre:</span> {me.name}</p>
+            <p><span className="font-medium">Email:</span> {me.email}</p>
+            <p><span className="font-medium">Rol:</span> {me.role}</p>
+            <div className="flex gap-2 pt-2">
+              <button onClick={() => refresh()} className="rounded-xl bg-gray-100 px-3 py-2 hover:bg-gray-200">Refrescar</button>
+            </div>
+
+            {/* ejemplo simple para mostrar órdenes */}
+            <div className="pt-4">
+              <h3 className="font-semibold">Órdenes</h3>
+              {orders.length === 0 ? <p className="text-gray-600">No hay órdenes.</p> :
+                <ul className="mt-2 space-y-2">
+                  {orders.map(o => <li key={o.id} className="text-sm">#{o.id} — {o.status}</li>)}
+                </ul>
+              }
+            </div>
           </div>
-        </div>
-      ) : (
-        <p className="text-gray-600">Cargando…</p>
+        ) : <p className="text-gray-600">Cargando usuario…</p>
       )}
     </Card>
   );
