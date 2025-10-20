@@ -1,0 +1,117 @@
+# ================================================
+# 🧱 PROYECTO NODE.JS (BACKEND + FRONTEND)
+# ================================================
+
+# --- Dependencias ---
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# --- Entornos ---
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+.env.*.local
+
+# --- Logs y depuración ---
+logs/
+*.log
+*.log.*
+npm-debug.log*
+debug.log*
+error.log*
+lerna-debug.log*
+
+# --- Compilados / Builds ---
+dist/
+build/
+.cache/
+.next/
+out/
+coverage/
+temp/
+.tmp/
+*.tsbuildinfo
+
+# --- Archivos temporales del sistema ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+*.swp
+*.swo
+*.bak
+*.tmp
+*.old
+*.orig
+
+# --- Configuración de IDEs ---
+.vscode/
+.idea/
+*.iml
+
+# --- Docker ---
+/docker-data/
+/docker-compose.override.yml
+*.pid
+*.seed
+*.pid.lock
+
+# --- Tests ---
+/coverage/
+.nyc_output/
+jest-html-reporters-*.html
+test-results/
+
+# --- Archivos de servicio ---
+*.tgz
+*.zip
+*.tar
+*.tar.gz
+
+# --- Tipos específicos de proyectos ---
+# React
+/frontend/.env.local
+/frontend/.env.production
+/frontend/.next/
+frontend/build/
+
+# Backend Node
+/backend/.env.local
+/backend/.env.production
+/backend/dist/
+backend/logs/
+
+# --- SQL o inicializaciones ---
+/schema.sql
+
+# --- Persistencia local (volúmenes, bases de datos) ---
+/db_data/
+**/data/
+**/persist/
+**/uploads/
+**/storage/
+
+# --- Otros ---
+*.pem
+*.crt
+*.key
+*.pfx
+
+# --- Configuración temporal o experimental ---
+**/__pycache__/
+**/.pytest_cache/
+**/.scannerwork/
+**/.coverage
+*.rej
+
+# --- Archivos generados por Docker Desktop o Kubernetes ---
+/.docker/
+.kube/
