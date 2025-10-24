@@ -99,21 +99,15 @@ function useCart() {
     });
   };
 
-  useEffect(() => { fetchMe(); }, [token]);
-
-  return { token, user, login, register, logout, refresh: fetchMe };
+  // devolver solo la API del carrito (antes había código sobrante que devolvía auth)
+  return { items, addItem, updateQuantity, setItems };
 }
 
 export default function PetziGoUI() {
   const auth = useAuth();
-  const [tab, setTab] = useState("login");
+  const [tab, setTab] = useState(() => (auth.token ? "dashboard" : "login"));
 
-  useEffect(() => {
-    if (!auth.token && (tab === "dashboard" || tab === "services")) {
-      setTab("login");
-    }
-  }, [auth.token, tab]);
-
+  // Añadir navItems para que {navItems.map((t) => (...))} funcione
   const navItems = useMemo(() => {
     const items = [
       { id: "home", label: "Inicio" },
@@ -129,6 +123,32 @@ export default function PetziGoUI() {
     return items;
   }, [auth.token]);
 
+  // Esperar a que el provider valide el token antes de forzar pestañas
+  useEffect(() => {
+    if (auth.loading) return;
+
+    if (!auth.token && (tab === "dashboard" || tab === "services")) {
+      setTab("login");
+    } else if (auth.token && (tab === "login" || tab === "register")) {
+      setTab("dashboard");
+    }
+  }, [auth.token, auth.loading, tab]);  
+
+  useEffect(() => {
+    if (!auth.token && (tab === "dashboard" || tab === "services")) {
+      setTab("login");
+    }
+  }, [auth.token, tab]);
+
+  // Mientras validamos token, mostramos una pantalla de carga (evita redirecciones prematuras)
+  if (auth.loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="rounded-lg bg-white p-6 shadow">Validando sesión…</div>
+      </div>
+    );
+  }
+
   // 👉 si estamos en login, usamos la pantalla full-screen
   if (tab === "login") {
     return (
@@ -138,7 +158,7 @@ export default function PetziGoUI() {
         goRegister={() => setTab("register")}
       />
     );
-  }
+  }  
 
   // 👉 resto de pestañas mantienen tu layout con header
   return (
@@ -473,7 +493,7 @@ function Services({ auth }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const load = async () => {
+    const loadServices = async () => {
       setError("");
       try {
         const data = await api("/services", auth.token ? { token: auth.token } : {});
@@ -482,7 +502,7 @@ function Services({ auth }) {
         setError(e.message);
       }
     };
-    if (auth.token) load();
+    if (auth.token) loadServices();
   }, [auth.token]);
 
   if (!auth.token) return (
@@ -491,7 +511,8 @@ function Services({ auth }) {
     </Card>
   );
 
-  const load = async () => {
+  const createService = async (e) => {
+    e?.preventDefault?.();
     setError("");
     try {
       await api("/services", { method: "POST", token: auth.token, body: { title, description, price: Number(price) } });
@@ -519,7 +540,7 @@ function Services({ auth }) {
         {list.length === 0 && <p className="py-2 text-gray-600">No hay servicios.</p>}
       </ul>
 
-      <form onSubmit={create} className="mt-4 grid gap-3">
+      <form onSubmit={createService} className="mt-4 grid gap-3">
         <p className="text-sm font-medium text-gray-700">Crear servicio (requiere rol PROVIDER)</p>
         <Input label="Título" value={title} onChange={setTitle} required />
         <Input label="Descripción" value={description} onChange={setDescription} required />
