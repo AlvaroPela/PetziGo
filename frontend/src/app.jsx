@@ -25,6 +25,7 @@ import ProviderProfile from "./pages/provider/Profile";
 // Admin Pages
 import AdminDashboard from "./pages/admin/Dashboard";
 import UserManagement from "./pages/admin/UserManagement";
+import NotFoundScreen from "./pages/public/NotFoundScreen";
 
 export function App() {
 	const auth = useAuth();
@@ -66,6 +67,8 @@ export function App() {
 						<Route index element={<AdminDashboard />} />
 						<Route path="users" element={<UserManagement />} />
 					</Route>
+
+          <Route path="*" element={<NotFoundScreen />} />
 				</Route>
 			</Routes>
 		</BrowserRouter>
