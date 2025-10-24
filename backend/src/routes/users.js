@@ -1,165 +1,295 @@
 import { Router } from 'express';
-import { body, validationResult, param, query } from 'express-validator';
+import { body, validationResult } from 'express-validator';
 import { pool } from '../config/db.js';
-import { authRequired } from '../middleware/auth.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
 
 const router = Router();
-const BASE_ROLES = ['USER', 'PROVIDER', 'ADMIN'];
 
-router.get('/me', authRequired(BASE_ROLES), async (req, res) => {
-  const [[user]] = await pool.query(
-    `SELECT id, name, email, role, phone, address, legal_representative AS legalRepresentative,
-            company_name AS companyName, tax_id AS taxId, status, documents_status AS documentsStatus,
-            created_at AS createdAt, updated_at AS updatedAt
-     FROM users WHERE id = ?`,
-    [req.user.id]
-  );
-  res.json(user);
+// Obtener usuario actual
+router.get('/me', requireAuth, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT u.id, u.name, u.email, u.role, u.status, u.phone, u.address,
+              CASE WHEN u.role = 'PROVIDER' THEN pp.verified ELSE NULL END as provider_verified,
+              CASE WHEN u.role = 'PROVIDER' THEN pp.business_description ELSE NULL END as business_description
+       FROM users u
+       LEFT JOIN provider_profiles pp ON u.id = pp.user_id
+       WHERE u.id = ?`,
+      [req.user.id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    const user = rows[0];
+    res.json(user);
+  } catch (err) {
+    console.error('Error al obtener usuario:', err);
+    res.status(500).json({
+      message: 'Error al obtener información del usuario'
+    });
+  }
 });
 
-const updateValidations = [
-  body('name').optional().trim().notEmpty().withMessage('El nombre no puede estar vacio'),
-  body('phone').optional().trim().notEmpty().withMessage('El telefono no puede estar vacio'),
-  body('address').optional().trim().notEmpty().withMessage('La direccion no puede estar vacia'),
-  body('legalRepresentative')
+// Validaciones para mascota
+const petValidation = [
+  body('name').trim().notEmpty().withMessage('El nombre es requerido'),
+  body('species')
+    .isIn(['DOG', 'CAT', 'OTHER'])
+    .withMessage('Especie inválida'),
+  body('breed')
     .optional()
     .trim()
     .notEmpty()
-    .withMessage('El representante legal no puede estar vacio'),
-  body('companyName')
+    .withMessage('La raza no puede estar vacía'),
+  body('birth_date')
     .optional()
-    .trim()
-    .notEmpty()
-    .withMessage('La razon social no puede estar vacia'),
-  body('taxId').optional().trim().notEmpty().withMessage('El NIT no puede estar vacio')
+    .isISO8601()
+    .withMessage('Fecha de nacimiento inválida'),
 ];
 
-router.put('/me', authRequired(BASE_ROLES), updateValidations, async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
-  const role = req.user.role;
-  const allowedFields = new Set(['phone', 'address']);
-  if (role === 'USER') {
-    allowedFields.add('name');
-  }
-  if (role === 'PROVIDER') {
-    allowedFields.add('legalRepresentative');
-    allowedFields.add('companyName');
-    allowedFields.add('taxId');
-    allowedFields.add('phone');
-    allowedFields.add('address');
-  }
-  if (role === 'ADMIN') {
-    allowedFields.add('name');
-    allowedFields.add('legalRepresentative');
-    allowedFields.add('companyName');
-    allowedFields.add('taxId');
-  }
-
-  const fieldMap = {
-    name: 'name',
-    phone: 'phone',
-    address: 'address',
-    legalRepresentative: 'legal_representative',
-    companyName: 'company_name',
-    taxId: 'tax_id'
-  };
-
-  const updates = [];
-  const values = [];
-
-  Object.entries(fieldMap).forEach(([key, column]) => {
-    if (!allowedFields.has(key)) {
-      return;
+// Crear mascota
+router.post('/pets', requireAuth, petValidation, async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
-    if (req.body[key] !== undefined) {
-      updates.push(`${column} = ?`);
-      values.push(req.body[key]);
-      if (role === 'PROVIDER' && key === 'companyName') {
-        updates.push('name = ?');
-        values.push(req.body[key]);
+
+    const { name, species, breed, birth_date, special_needs, photo_url } = req.body;
+
+    const [result] = await pool.query(
+      `INSERT INTO pets (user_id, name, species, breed, birth_date, special_needs, photo_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [req.user.id, name, species, breed, birth_date, special_needs, photo_url]
+    );
+
+    res.status(201).json({
+      message: 'Mascota registrada exitosamente',
+      pet: {
+        id: result.insertId,
+        name,
+        species,
+        breed,
+        birth_date,
+        special_needs,
+        photo_url
       }
+    });
+
+  } catch (err) {
+    console.error('Error al crear mascota:', err);
+    res.status(500).json({
+      message: 'Error al registrar mascota'
+    });
+  }
+});
+
+// Obtener mascotas del usuario
+router.get('/pets', requireAuth, async (req, res) => {
+  try {
+    const [pets] = await pool.query(
+      'SELECT * FROM pets WHERE user_id = ?',
+      [req.user.id]
+    );
+
+    res.json({ pets });
+
+  } catch (err) {
+    console.error('Error al obtener mascotas:', err);
+    res.status(500).json({
+      message: 'Error al obtener mascotas'
+    });
+  }
+});
+
+// Actualizar mascota
+router.put('/pets/:id', requireAuth, petValidation, async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
-  });
 
-  if (updates.length === 0) {
-    return res.json({ ok: true, updated: 0 });
+    const { name, species, breed, birth_date, special_needs, photo_url } = req.body;
+    const petId = req.params.id;
+
+    // Verificar propiedad
+    const [pet] = await pool.query(
+      'SELECT id FROM pets WHERE id = ? AND user_id = ?',
+      [petId, req.user.id]
+    );
+
+    if (pet.length === 0) {
+      return res.status(404).json({
+        message: 'Mascota no encontrada'
+      });
+    }
+
+    await pool.query(
+      `UPDATE pets 
+       SET name = ?, species = ?, breed = ?, birth_date = ?, 
+           special_needs = ?, photo_url = ?
+       WHERE id = ?`,
+      [name, species, breed, birth_date, special_needs, photo_url, petId]
+    );
+
+    res.json({
+      message: 'Mascota actualizada exitosamente'
+    });
+
+  } catch (err) {
+    console.error('Error al actualizar mascota:', err);
+    res.status(500).json({
+      message: 'Error al actualizar mascota'
+    });
   }
-
-  values.push(req.user.id);
-  await pool.query(`UPDATE users SET ${updates.join(', ')}, updated_at = NOW() WHERE id = ?`, values);
-  res.json({ ok: true, updated: updates.length });
 });
 
-router.get('/', authRequired('ADMIN'), [
-  query('role').optional().isIn(BASE_ROLES),
-  query('status').optional().isIn(['ACTIVE', 'INACTIVE']),
-  query('search').optional().trim().isLength({ min: 2 })
-], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
+// Eliminar mascota
+router.delete('/pets/:id', requireAuth, async (req, res) => {
+  try {
+    const petId = req.params.id;
 
-  const { role, status, search } = req.query;
-  const filters = [];
-  const values = [];
+    // Verificar propiedad
+    const [pet] = await pool.query(
+      'SELECT id FROM pets WHERE id = ? AND user_id = ?',
+      [petId, req.user.id]
+    );
 
-  if (role) {
-    filters.push('role = ?');
-    values.push(role);
-  }
-  if (status) {
-    filters.push('status = ?');
-    values.push(status);
-  }
-  if (search) {
-    filters.push('(name LIKE ? OR email LIKE ? OR company_name LIKE ? OR tax_id LIKE ?)');
-    const term = `%${search}%`;
-    values.push(term, term, term, term);
-  }
+    if (pet.length === 0) {
+      return res.status(404).json({
+        message: 'Mascota no encontrada'
+      });
+    }
 
-  const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
-  const [rows] = await pool.query(
-    `SELECT id, name, email, role, status, phone, address, company_name AS companyName, tax_id AS taxId,
-            documents_status AS documentsStatus, created_at AS createdAt
-     FROM users ${where} ORDER BY created_at DESC`,
-    values
-  );
-  res.json(rows);
+    await pool.query('DELETE FROM pets WHERE id = ?', [petId]);
+
+    res.json({
+      message: 'Mascota eliminada exitosamente'
+    });
+
+  } catch (err) {
+    console.error('Error al eliminar mascota:', err);
+    res.status(500).json({
+      message: 'Error al eliminar mascota'
+    });
+  }
 });
 
-router.patch('/:id/status', authRequired('ADMIN'), [
-  param('id').isInt({ min: 1 }),
-  body('status').isIn(['ACTIVE', 'INACTIVE'])
+// Actualizar perfil de usuario
+router.put('/profile', requireAuth, [
+  body('name').optional().trim().notEmpty().withMessage('El nombre no puede estar vacío'),
+  body('phone')
+    .optional()
+    .matches(/^\+?[1-9]\d{1,14}$/)
+    .withMessage('Teléfono inválido'),
+  body('address').optional().trim().notEmpty().withMessage('La dirección no puede estar vacía')
 ], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
 
-  const { id } = req.params;
-  const { status } = req.body;
-  await pool.query('UPDATE users SET status = ?, updated_at = NOW() WHERE id = ?', [status, id]);
-  res.json({ ok: true, status });
+    const { name, phone, address } = req.body;
+    const updates = {};
+
+    if (name !== undefined) updates.name = name;
+    if (phone !== undefined) updates.phone = phone;
+    if (address !== undefined) updates.address = address;
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        message: 'No se proporcionaron datos para actualizar'
+      });
+    }
+
+    const query = `UPDATE users SET ? WHERE id = ?`;
+    await pool.query(query, [updates, req.user.id]);
+
+    res.json({
+      message: 'Perfil actualizado exitosamente'
+    });
+
+  } catch (err) {
+    console.error('Error al actualizar perfil:', err);
+    res.status(500).json({
+      message: 'Error al actualizar perfil'
+    });
+  }
 });
 
-router.patch('/:id/documents', authRequired('ADMIN'), [
-  param('id').isInt({ min: 1 }),
-  body('documentsStatus').isIn(['PENDING', 'REQUESTED', 'SUBMITTED', 'APPROVED', 'REJECTED'])
-], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
+// Rutas de administrador
+router.get('/admin/list', requireAuth, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    const { search, role, status } = req.query;
+    let query = `
+      SELECT u.id, u.name, u.email, u.role, u.status, u.phone, u.address,
+             CASE WHEN u.role = 'PROVIDER' THEN pp.verified ELSE NULL END as provider_verified,
+             CASE WHEN u.role = 'PROVIDER' THEN pp.business_description ELSE NULL END as business_description
+      FROM users u
+      LEFT JOIN provider_profiles pp ON u.id = pp.user_id
+      WHERE 1=1
+    `;
+    const values = [];
 
-  const { id } = req.params;
-  const { documentsStatus } = req.body;
-  await pool.query('UPDATE users SET documents_status = ?, updated_at = NOW() WHERE id = ?', [documentsStatus, id]);
-  res.json({ ok: true, documentsStatus });
+    if (search) {
+      query += ` AND (u.name LIKE ? OR u.email LIKE ?)`;
+      values.push(`%${search}%`, `%${search}%`);
+    }
+
+    if (role) {
+      query += ` AND u.role = ?`;
+      values.push(role);
+    }
+
+    if (status) {
+      query += ` AND u.status = ?`;
+      values.push(status);
+    }
+
+    query += ` ORDER BY u.created_at DESC`;
+
+    const [users] = await pool.query(query, values);
+
+    res.json({ users });
+  } catch (err) {
+    console.error('Error al listar usuarios:', err);
+    res.status(500).json({
+      message: 'Error al obtener lista de usuarios'
+    });
+  }
+});
+
+// Actualizar estado de usuario
+router.patch('/admin/users/:id/status', requireAuth, requireRole(['ADMIN']), [
+  body('status').isIn(['ACTIVE', 'INACTIVE']).withMessage('Estado inválido')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { id } = req.params;
+    const { status } = req.body;
+
+    await pool.query(
+      'UPDATE users SET status = ? WHERE id = ?',
+      [status, id]
+    );
+
+    res.json({
+      message: 'Estado de usuario actualizado exitosamente'
+    });
+  } catch (err) {
+    console.error('Error al actualizar estado:', err);
+    res.status(500).json({
+      message: 'Error al actualizar estado del usuario'
+    });
+  }
 });
 
 export default router;

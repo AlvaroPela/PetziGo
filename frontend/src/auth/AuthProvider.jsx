@@ -19,11 +19,16 @@ export function AuthProvider({ children }) {
     setLoading(true);
     try {
       const me = await api("/users/me", { token: activeToken });
+      if (!me) {
+        throw new Error("No se pudo obtener la información del usuario");
+      }
       setUser(me);
       return me;
     } catch (err) {
-      // Si token inválido -> limpiar
-      console.error("fetchMe error:", err);
+      // No mostramos el error si es 404 - significa que el usuario no existe o token inválido
+      if (!err.message?.includes("Not Found")) {
+        console.error("Error al obtener datos del usuario:", err.message);
+      }
       localStorage.removeItem("token");
       setToken("");
       setUser(null);
@@ -43,13 +48,39 @@ export function AuthProvider({ children }) {
   }, [token, fetchMe]);
 
   const login = useCallback(async (email, password) => {
-    const data = await api("/auth/login", { method: "POST", body: { email, password } });
-    if (!data?.token) throw new Error("No token recibido del servidor");
-    localStorage.setItem("token", data.token);
-    setToken(data.token);
-    // fetchMe actualizará user
-    await fetchMe(data.token);
-    return data;
+    try {
+      const data = await api("/auth/login", { method: "POST", body: { email, password } });
+      if (!data?.token) {
+        throw new Error("No se recibió el token de acceso");
+      }
+      localStorage.setItem("token", data.token);
+      setToken(data.token);
+      
+      try {
+        const userData = await fetchMe(data.token);
+        if (!userData) {
+          throw new Error("No se pudo obtener la información del usuario");
+        }
+        // Si todo sale bien, actualizamos el usuario
+        setUser(userData);
+        return data;
+      } catch (userError) {
+        // Si falla obtener datos del usuario, limpiamos todo y relanzamos
+        localStorage.removeItem("token");
+        setToken("");
+        setUser(null);
+        throw new Error(userError.message === 'Not Found' 
+          ? "Error al obtener datos del usuario. Por favor intenta de nuevo." 
+          : userError.message);
+      }
+    } catch (error) {
+      // Asegurarnos de que el error tenga un mensaje amigable
+      throw new Error(
+        error.message === 'Not Found' 
+          ? "No se pudo acceder a tu cuenta. Por favor verifica tus credenciales." 
+          : error.message || "Error al iniciar sesión. Por favor intenta de nuevo."
+      );
+    }
   }, [fetchMe]);
 
   const register = useCallback((payload) => api("/auth/register", { method: "POST", body: payload }), []);

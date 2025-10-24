@@ -1,163 +1,179 @@
 import { Router } from 'express';
+import { body, validationResult } from 'express-validator';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import {pool} from '../config/db.js';
+import { pool, withTransaction } from '../config/db.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
-const JWT_EXPIRES_IN = '12h';
 
-function isEmail(v) {
-  return /.+@.+\..+/.test(String(v).toLowerCase());
-}
-function onlyDigits(v) {
-  return String(v || '').replace(/\D/g, '');
-}
+// Validaciones comunes
+const registerValidation = [
+  body('name').trim().notEmpty().withMessage('El nombre es requerido'),
+  body('email').isEmail().withMessage('Email inválido'),
+  body('password')
+    .isLength({ min: 6 })
+    .withMessage('La contraseña debe tener al menos 6 caracteres'),
+  body('role')
+    .isIn(['CLIENT', 'PROVIDER'])
+    .withMessage('Rol inválido'),
+  body('phone')
+    .optional()
+    .matches(/^\+?[1-9]\d{1,14}$/)
+    .withMessage('Teléfono inválido'),
+];
 
-/**
- * Registro flexible:
- * - Soporta body con:
- *   a) { userType: 'BUYER'|'PROVIDER', ... }
- *   b) { role: 'USER'|'PROVIDER'|'ADMIN', ... }  // se mapea a userType
- * - Campos de proveedor: legalRepName / legalRepresentative, companyName, nit / taxId
- */
-router.post('/register', async (req, res) => {
+// Registro de usuarios
+router.post('/register', registerValidation, async (req, res) => {
   try {
-    const {
-      // comunes
-      name,
-      lastName,
-      email,
-      password,
-      address = '',
-      phone = '',
-
-      // variantes de tipo/rol
-      userType,                    // 'BUYER' | 'PROVIDER'
-      role,                        // 'USER' | 'PROVIDER' | 'ADMIN' (frontend viejo)
-
-      // proveedor (admite alias)
-      legalRepName,
-      legalRepresentative,
-      companyName,
-      nit,
-      taxId,
-
-      // opcional de versiones anteriores
-      documentType,
-    } = req.body || {};
-
-    // Normalización tipo/rol
-    const finalUserType = userType
-      ? userType.toUpperCase()
-      : (role === 'PROVIDER' ? 'PROVIDER' : 'BUYER');
-
-    const finalRole = finalUserType === 'PROVIDER'
-      ? 'PROVIDER'
-      : (role === 'ADMIN' ? 'ADMIN' : 'USER'); // por si llega ADMIN
-
-    const repName = legalRepName || legalRepresentative || null;
-    const finalNit = nit || taxId || null;
-
-    // Validaciones básicas
-    if (!name || name.trim().length < 2) return res.status(400).json({ message: 'Nombre inválido' });
-    //if (!lastName || lastName.trim().length < 2) return res.status(400).json({ message: 'Apellido inválido' });
-    if (!isEmail(email)) return res.status(400).json({ message: 'Email inválido' });
-    if (!password || password.length < 6) return res.status(400).json({ message: 'Contraseña muy corta' });
-
-    const phoneDigits = onlyDigits(phone);
-    if (address && address.trim().length < 5) return res.status(400).json({ message: 'Dirección inválida' });
-    if (phone && phoneDigits.length < 8) return res.status(400).json({ message: 'Celular inválido' });
-
-    if (!['BUYER', 'PROVIDER'].includes(finalUserType))
-      return res.status(400).json({ message: 'Tipo de usuario inválido' });
-
-    if (finalUserType === 'PROVIDER') {
-      if (!companyName || companyName.trim().length < 3)
-        return res.status(400).json({ message: 'Razón social inválida' });
-      if (!repName || repName.trim().length < 3)
-        return res.status(400).json({ message: 'Representante legal inválido' });
-      if (!finalNit || String(finalNit).trim().length < 4)
-        return res.status(400).json({ message: 'NIT inválido' });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
 
-    // Email único
-    const [existing] = await pool.query('SELECT id FROM users WHERE email=? LIMIT 1', [email]);
-    if (existing.length) return res.status(409).json({ message: 'Email ya registrado' });
+    const { name, email, password, role, phone, address } = req.body;
 
-    // Hash y alta
-    const hash = await bcrypt.hash(password, 10);
-    const [result] = await pool.query(
-      `INSERT INTO users
-        (name, email, password_hash, role, user_type, address, phone, legal_representative, company_name, nit, document_type)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-      [
-        name.trim(),
-        //lastName.trim(),
-        email.trim(),
-        hash,
-        finalRole,               // USER | PROVIDER | ADMIN
-        finalUserType,           // BUYER | PROVIDER
-        address ? address.trim() : null,
-        phoneDigits || null,
-        finalUserType === 'PROVIDER' ? repName : null,
-        finalUserType === 'PROVIDER' ? companyName : null,
-        finalUserType === 'PROVIDER' ? finalNit : null,
-        documentType || null,
-      ]
+    // Verificar email único
+    const [existingUsers] = await pool.query(
+      'SELECT id FROM users WHERE email = ?',
+      [email]
     );
 
-    // Puedes devolver token o solo confirmar registro; aquí devolvemos minimal
-    res.status(201).json({
-      id: result.insertId,
-      name,
-      lastName,
-      email,
-      role: finalRole,
-      userType: finalUserType,
-      message: 'Usuario registrado',
+    if (existingUsers.length > 0) {
+      return res.status(400).json({
+        message: 'El email ya está registrado'
+      });
+    }
+
+    // Hash del password
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    // Crear usuario en transacción
+    const result = await withTransaction(async (connection) => {
+      // Insertar usuario
+      const [userResult] = await connection.query(
+        `INSERT INTO users (name, email, password_hash, role, phone, address)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [name, email, passwordHash, role, phone, address]
+      );
+
+      // Si es proveedor, crear perfil
+      if (role === 'PROVIDER') {
+        await connection.query(
+          'INSERT INTO provider_profiles (user_id) VALUES (?)',
+          [userResult.insertId]
+        );
+      }
+
+      return userResult.insertId;
     });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: 'Error en registro' });
+
+    // Generar JWT
+    const token = jwt.sign(
+      { id: result, role },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.status(201).json({
+      message: 'Usuario registrado exitosamente',
+      token,
+      user: {
+        id: result,
+        name,
+        email,
+        role
+      }
+    });
+
+  } catch (err) {
+    console.error('Error en registro:', err);
+    res.status(500).json({
+      message: 'Error al registrar usuario'
+    });
   }
 });
 
-router.post('/login', async (req, res) => {
+// Login
+router.post('/login', [
+  body('email').isEmail().withMessage('Email inválido'),
+  body('password').notEmpty().withMessage('Contraseña requerida')
+], async (req, res) => {
   try {
-    const { email, password } = req.body || {};
-    if (!isEmail(email)) return res.status(400).json({ message: 'Email inválido' });
-    if (!password) return res.status(400).json({ message: 'Contraseña requerida' });
-
-    const [rows] = await pool.query('SELECT * FROM users WHERE email=? LIMIT 1', [email]);
-    if (!rows.length) return res.status(401).json({ message: 'Credenciales inválidas' });
-
-    const u = rows[0];
-    const ok = await bcrypt.compare(password, u.password_hash || '');
-    if (!ok) return res.status(401).json({ message: 'Credenciales inválidas' });
-
-    // Si manejas is_active (0/1), puedes bloquear aquí
-    if (typeof u.is_active !== 'undefined' && u.is_active === 0) {
-      return res.status(403).json({ message: 'Cuenta deshabilitada' });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
 
+    const { email, password } = req.body;
+
+    // Buscar usuario
+    const [users] = await pool.query(
+      `SELECT u.*, 
+        CASE 
+          WHEN u.role = 'PROVIDER' THEN pp.verified
+          ELSE NULL
+        END as provider_verified
+       FROM users u
+       LEFT JOIN provider_profiles pp ON u.id = pp.user_id
+       WHERE u.email = ?`,
+      [email]
+    );
+
+    if (users.length === 0) {
+      return res.status(401).json({
+        message: 'Credenciales inválidas'
+      });
+    }
+
+    const user = users[0];
+
+    // Verificar estado
+    if (user.status === 'INACTIVE') {
+      return res.status(401).json({
+        message: 'Usuario inactivo'
+      });
+    }
+
+    // Verificar password
+    const validPassword = await bcrypt.compare(password, user.password_hash);
+    if (!validPassword) {
+      return res.status(401).json({
+        message: 'Credenciales inválidas'
+      });
+    }
+
+    // Generar JWT
     const token = jwt.sign(
-      { id: u.id, role: u.role },
-      process.env.JWT_SECRET || 'dev',
-      { expiresIn: JWT_EXPIRES_IN }
+      { id: user.id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
     );
 
     res.json({
       token,
-      role: u.role,
-      userType: u.user_type,
-      name: u.name,
-      lastName: u.last_name,
-      email: u.email,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        provider_verified: user.provider_verified
+      }
     });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: 'Error al iniciar sesión' });
+
+  } catch (err) {
+    console.error('Error en login:', err);
+    res.status(500).json({
+      message: 'Error en el servidor'
+    });
   }
+});
+
+// Verificar token / Obtener usuario actual
+router.get('/me', requireAuth, (req, res) => {
+  const { password_hash, ...user } = req.user;
+  res.json({ user });
 });
 
 export default router;
