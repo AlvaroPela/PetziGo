@@ -21,13 +21,13 @@ const serviceValidation = [
     .isFloat({ min: 0 })
     .withMessage('El precio debe ser mayor o igual a 0'),
   body('category')
-    .isIn(['WALKING', 'VETERINARY', 'TRAINING', 'GROOMING', 'DAYCARE', 'OTHER'])
+    .isIn(['PASEO', 'VETERINARIA', 'ENTRENAMIENTO', 'ESTETICA', 'GUARDERIA', 'OTRO'])
     .withMessage('Categoría inválida')
 ];
 
 // Obtener todos los servicios (público)
 router.get('/', [
-  query('category').optional().isIn(['WALKING', 'VETERINARY', 'TRAINING', 'GROOMING', 'DAYCARE', 'OTHER']),
+  query('category').optional().isIn(['PASEO', 'VETERINARIA', 'ENTRENAMIENTO', 'ESTETICA', 'GUARDERIA', 'OTRO']),
   query('min_price').optional().isFloat({ min: 0 }),
   query('max_price').optional().isFloat({ min: 0 }),
   query('rating').optional().isFloat({ min: 1, max: 5 }),
@@ -41,6 +41,17 @@ router.get('/', [
     }
 
     const { category, min_price, max_price, rating, search, provider_id } = req.query;
+    // PENDIENTE para cuando se implemnte la activacion y desactivacions del provedor
+    // let query = `
+    //   SELECT s.*, u.name as provider_name, 
+    //          pp.average_rating, pp.total_reviews,
+    //          pp.location_lat, pp.location_lng
+    //   FROM services s
+    //   INNER JOIN users u ON s.provider_id = u.id
+    //   INNER JOIN provider_profiles pp ON s.provider_id = pp.user_id
+    //   WHERE s.active = 1 AND u.status = 'ACTIVE' AND pp.verified = 1
+    // `;
+
     let query = `
       SELECT s.*, u.name as provider_name, 
              pp.average_rating, pp.total_reviews,
@@ -48,8 +59,9 @@ router.get('/', [
       FROM services s
       INNER JOIN users u ON s.provider_id = u.id
       INNER JOIN provider_profiles pp ON s.provider_id = pp.user_id
-      WHERE s.active = 1 AND u.status = 'ACTIVE' AND pp.verified = 1
+      WHERE s.active = 1
     `;
+
     const values = [];
 
     if (category) {
@@ -191,7 +203,7 @@ router.put('/:id', requireAuth, requireResourceOwnership('service'), serviceVali
     );
 
     console.log('[services] updated id:', serviceId);
-    res.json({ message: 'Servicio actualizado exitosamente' });
+    res.json({ message: 'Servicio actualizado exitosamente', service: { id: serviceId, title, description, price, category } });
 
   } catch (err) {
     console.error('Error al actualizar servicio:', err);
@@ -243,5 +255,36 @@ router.get('/provider/mine', requireAuth, requireRole(['PROVIDER']), async (req,
     res.status(500).json({ message: 'Error al obtener servicios' });
   }
 });
+
+// Eliminar servicio -> marcar active = 2 (soft delete)
+// Requiere autenticación y que el usuario sea propietario (requireResourceOwnership('service'))
+router.delete('/:id', requireAuth, requireResourceOwnership('service'), async (req, res) => {
+  console.log('[services] DELETE /:id - id:', req.params.id, 'user:', req.user?.id);
+  try {
+    const serviceId = req.params.id;
+
+    // Actualizar active a 2 (estado eliminado)
+    const [result] = await pool.query(
+      `UPDATE services
+       SET active = 2
+       WHERE id = ?`,
+      [serviceId]
+    );
+
+    // result.affectedRows (mysql2) indica si se actualizó algo
+    if (result.affectedRows === 0) {
+      console.warn('[services] delete attempt - not found or no change id:', serviceId);
+      return res.status(404).json({ message: 'Servicio no encontrado' });
+    }
+
+    console.log('[services] soft-deleted id:', serviceId, 'by user:', req.user?.id);
+    res.json({ message: 'Servicio eliminado correctamente', id: serviceId });
+
+  } catch (err) {
+    console.error('Error al eliminar servicio:', err);
+    res.status(500).json({ message: 'Error al eliminar servicio' });
+  }
+});
+
 
 export default router;

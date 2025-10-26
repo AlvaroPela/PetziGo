@@ -5,10 +5,5 @@
 /* estilos opcionales propios */
 html, body, #root {height: 100%; }
 
-/* Inputs: make them resemble the login look */
-input[type="text"], input[type="email"], input[type="password"], textarea {
-  background-color: #FEF3C7; /* light yellow similar to login screen */
-}
-
 /* Provide a subtle global background */
 body { background-color: #f8fafc; }

@@ -33,7 +33,7 @@ export default function Sidebar() {
               to={user ? item.path : '/login'}
               className={`flex items-center space-x-3 p-3 rounded-lg transition-colors ${
                 isActive(item.path)
-                  ? 'bg-purple-700 text-white'
+                  ? 'bg-violet-800 text-white font-semibold'
                   : 'hover:bg-violet-800'
               }`}
             >

@@ -74,7 +74,13 @@ export const requireRole = (roles) => {
 
 // Middleware para verificar proveedores validados
 export const requireVerifiedProvider = (req, res, next) => {
-  if (req.user.role !== 'PROVIDER' || !req.user.provider_verified) {
+  // Se ocmenta por ahora PENDIENTE
+  // if (req.user.role !== 'PROVIDER' || !req.user.provider_verified) {
+  //   return res.status(403).json({ 
+  //     message: 'Esta operación requiere un proveedor verificado' 
+  //   });
+  // }
+  if (req.user.role !== 'PROVIDER') {
     return res.status(403).json({ 
       message: 'Esta operación requiere un proveedor verificado' 
     });

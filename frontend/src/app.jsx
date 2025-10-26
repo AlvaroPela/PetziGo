@@ -11,7 +11,7 @@ import LandingPage from "./pages/public/LandingPage";
 import SearchPage from "./pages/public/SearchPage";
 import ServiceDetails from "./pages/public/ServiceDetails";
 import LoginScreen from "./components/LoginScreen";
-import ServicesPage from "./pages/public/Services";
+import ServicesPage from "./pages/public/ServicesPage";
 import RegisterPage from "./pages/auth/Register";
 
 // Client Pages
