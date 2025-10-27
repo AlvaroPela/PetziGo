@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { api } from "../lib/api";
-import { Input, Select } from "./FormComponents";
+import { Input, Select, Textarea, Button } from "./FormComponents";
 import { useAuth } from "../auth/AuthProvider";
 
 export default function ServiceForm({ initial = null, onSaved, onCancel }) {
@@ -87,12 +87,7 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 
 			<div>
 				<label className="block text-sm font-medium">Descripción</label>
-				<textarea
-					value={description}
-					onChange={(e) => setDescription(e.target.value)}
-					className="mt-1 block w-full border rounded px-3 py-2"
-					rows={3}
-				/>
+				<Textarea value={description} onChange={setDescription} rows={3} placeholder="Describe el servicio" />
 			</div>
 
 			<div>
@@ -100,7 +95,6 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 				<Select
 					value={category}
 					onChange={setCategory}
-					className="mt-1 block w-full border rounded px-3 py-2"
 					options={[
 						{ label: "Paseo", value: "PASEO" },
 						{ label: "Veterinaria", value: "VETERINARIA" },
@@ -114,16 +108,16 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 
 			<div>
 				<label className="block text-sm font-medium">Precio</label>
-				<Input value={price} onChange={setPrice} className="mt-1 block w-full border rounded px-3 py-2" inputMode="numeric" placeholder="0.00" />
+				<Input value={price} onChange={setPrice} inputMode="numeric" placeholder="0.00" />
 			</div>
 
 			<div className="flex items-center justify-end gap-2">
-				<button type="button" onClick={onCancel} className="px-4 py-2 rounded border">
+				<Button type="button" variant="outline" onClick={onCancel}>
 					Cancelar
-				</button>
-				<button type="submit" disabled={loading} className="px-4 py-2 rounded bg-petzi text-white disabled:opacity-60">
+				</Button>
+				<Button type="submit" variant="primary" disabled={loading}>
 					{loading ? "Guardando..." : initial?.id ? "Actualizar" : "Crear"}
-				</button>
+				</Button>
 			</div>
 		</form>
 	);

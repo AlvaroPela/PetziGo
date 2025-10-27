@@ -17,7 +17,7 @@ export default function Sidebar() {
   const isActive = (path) => location.pathname === path;
 
   return (
-    <div className="bg-violet-700 text-white h-screen w-64 fixed left-0 top-0 overflow-y-auto">
+    <div className="bg-violet-800 text-white h-screen w-64 fixed left-0 top-0 overflow-y-auto">
       <div className="p-4">
         <Link to="/" className="flex items-center space-x-2 mb-8">
           <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white/20 font-bold">
@@ -33,8 +33,8 @@ export default function Sidebar() {
               to={user ? item.path : '/login'}
               className={`flex items-center space-x-3 p-3 rounded-lg transition-colors ${
                 isActive(item.path)
-                  ? 'bg-violet-800 text-white font-semibold'
-                  : 'hover:bg-violet-800'
+                  ? 'bg-violet-900 text-white font-semibold'
+                  : 'hover:bg-violet-900'
               }`}
             >
               <span className="text-xl">{item.icon}</span>
@@ -44,7 +44,7 @@ export default function Sidebar() {
         </nav>
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-violet-700">
+  <div className="absolute bottom-0 left-0 right-0 p-4 bg-violet-800">
         {user ? (
           <div className="flex items-center space-x-3 p-3">
             <span className="text-xl">👤</span>
@@ -53,7 +53,7 @@ export default function Sidebar() {
         ) : (
           <Link
             to="/login"
-            className="flex items-center space-x-3 p-3 hover:bg-violet-800 rounded-lg transition-colors"
+            className="flex items-center space-x-3 p-3 hover:bg-violet-900 rounded-lg transition-colors"
           >
             <span className="text-xl">🔑</span>
             <span>Iniciar Sesión</span>

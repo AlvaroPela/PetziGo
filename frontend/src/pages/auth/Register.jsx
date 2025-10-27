@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../auth/AuthProvider';
 import { useNavigate } from 'react-router-dom';
+import { Input, Select, Button } from '../../components/FormComponents';
 
 const RegisterPage = () => {
   const auth = useAuth();
@@ -24,30 +25,20 @@ const RegisterPage = () => {
   return (
     <div className="container mx-auto p-4 max-w-md">
       <h1 className="text-2xl font-bold mb-4">Crear cuenta</h1>
-      <form onSubmit={submit} className="space-y-3 bg-white p-4 rounded-lg shadow">
-        <label className="block">
-          <span className="text-sm">Nombre</span>
-          <input required value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} className="mt-1 w-full rounded border px-3 py-2" />
-        </label>
-        <label className="block">
-          <span className="text-sm">Email</span>
-          <input required type="email" value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} className="mt-1 w-full rounded border px-3 py-2" />
-        </label>
-        <label className="block">
-          <span className="text-sm">Contraseña</span>
-          <input required type="password" value={form.password} onChange={(e) => setForm({...form, password: e.target.value})} className="mt-1 w-full rounded border px-3 py-2" />
-        </label>
-        <label className="block">
-          <span className="text-sm">Rol</span>
-          <select value={form.role} onChange={(e) => setForm({...form, role: e.target.value})} className="mt-1 w-full rounded border px-3 py-2">
-            <option value="CLIENT">Cliente</option>
-            <option value="PROVIDER">Proveedor</option>
-          </select>
-        </label>
+      <form onSubmit={submit} className="space-y-3 bg-white p-6 rounded-2xl shadow border">
+        <Input label="Nombre" required value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
+        <Input label="Email" type="email" required value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
+        <Input label="Contraseña" type="password" required value={form.password} onChange={(v) => setForm({ ...form, password: v })} />
+        <Select
+          label="Rol"
+          value={form.role}
+          onChange={(v) => setForm({ ...form, role: v })}
+          options={[{ value: 'CLIENT', label: 'Cliente' }, { value: 'PROVIDER', label: 'Proveedor' }]}
+        />
 
-        {error && <p className="text-red-600">{error}</p>}
+        {error && <p className="text-rose-600">{error}</p>}
 
-        <button type="submit" disabled={loading} className="w-full bg-petzi text-white py-2 rounded">{loading ? 'Registrando...' : 'Crear cuenta'}</button>
+        <Button type="submit" disabled={loading} className="w-full">{loading ? 'Registrando...' : 'Crear cuenta'}</Button>
       </form>
     </div>
   );

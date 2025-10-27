@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../../components/FormComponents';
 import { useParams } from 'react-router-dom';
 
 const ServiceDetails = () => {
@@ -46,9 +47,7 @@ const ServiceDetails = () => {
             <div className="bg-gray-50 p-4 rounded-lg">
               <div className="sticky top-4">
                 <h3 className="text-2xl font-bold mb-2">$99.999</h3>
-                <button className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg mb-4 hover:bg-blue-600">
-                  Reservar Ahora
-                </button>
+                <Button className="w-full mb-4" variant="primary">Reservar Ahora</Button>
                 <div className="text-sm text-gray-600">
                   <p>✓ Reserva Instantánea</p>
                   <p>✓ Garantía de Servicio</p>

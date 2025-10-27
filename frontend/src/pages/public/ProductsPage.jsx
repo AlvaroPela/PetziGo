@@ -3,6 +3,7 @@ import Modal from '../../components/Modal';
 import ProductForm from '../../components/ProductForm';
 import { api } from '../../lib/api';
 import { Link } from 'react-router-dom';
+import { Input, Select, Button } from '../../components/FormComponents';
 // --- Constants ---
 const CATEGORY_OPTIONS = [
   { label: 'Todas', value: '' },
@@ -111,48 +112,39 @@ export default function ProductsPage() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">Productos</h1>
         <div className="flex items-center gap-2">
-          <button onClick={openCreate} className="px-4 py-2 rounded bg-petzi text-white">Nuevo producto</button>
+          <Button onClick={openCreate}>Nuevo producto</Button>
         </div>
       </div>
 
-      <div className="mb-4 p-4 border rounded bg-white">
+      <div className="mb-4 p-4 border rounded-2xl bg-white">
         <h2 className="font-semibold mb-2">Filtros</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <label className="block text-sm font-medium">Categoría</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value)} className="mt-1 block w-full border rounded px-3 py-2">
-              {CATEGORY_OPTIONS.map((opt) => (
-                <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+            <Select label="Categoría" value={category} onChange={setCategory} options={CATEGORY_OPTIONS} />
           </div>
 
           <div>
-            <label className="block text-sm font-medium">Precio mínimo</label>
-            <input type="number" min="0" step="0.01" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} className="mt-1 block w-full border rounded px-3 py-2" placeholder="0" />
+            <Input label="Precio mínimo" type="number" min="0" step="0.01" value={minPrice} onChange={setMinPrice} placeholder="0" />
           </div>
 
           <div>
-            <label className="block text-sm font-medium">Precio máximo</label>
-            <input type="number" min="0" step="0.01" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} className="mt-1 block w-full border rounded px-3 py-2" placeholder="∞" />
+            <Input label="Precio máximo" type="number" min="0" step="0.01" value={maxPrice} onChange={setMaxPrice} placeholder="∞" />
           </div>
 
           <div>
-            <label className="block text-sm font-medium">Buscar</label>
-            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} className="mt-1 block w-full border rounded px-3 py-2" placeholder="palabra clave en nombre o descripción" />
+            <Input label="Buscar" value={search} onChange={setSearch} placeholder="palabra clave en nombre o descripción" />
           </div>
 
           <div>
-            <label className="block text-sm font-medium">Provider ID (opcional)</label>
-            <input type="text" value={providerId} onChange={(e) => setProviderId(e.target.value)} className="mt-1 block w-full border rounded px-3 py-2" placeholder="id del proveedor" />
+            <Input label="Provider ID (opcional)" value={providerId} onChange={setProviderId} placeholder="id del proveedor" />
           </div>
         </div>
 
         {filterError && <p className="text-red-600 mt-2">{filterError}</p>}
 
         <div className="mt-3 flex items-center gap-2">
-          <button onClick={loadWithFilters} className="px-4 py-2 rounded bg-petzi text-white" disabled={loading}>Aplicar filtros</button>
-          <button onClick={() => { setCategory(''); setMinPrice(''); setMaxPrice(''); setSearch(''); setProviderId(''); setFilterError(null); (async () => { setLoading(true); try { const res = await api('/products'); setProducts(Array.isArray(res.products) ? res.products : res.products || []); } catch (e) { setError(e.message || 'Error'); } finally { setLoading(false); } })(); }} className="px-4 py-2 rounded border" disabled={loading}>Resetear</button>
+          <Button onClick={loadWithFilters} disabled={loading}>Aplicar filtros</Button>
+          <Button onClick={() => { setCategory(''); setMinPrice(''); setMaxPrice(''); setSearch(''); setProviderId(''); setFilterError(null); (async () => { setLoading(true); try { const res = await api('/products'); setProducts(Array.isArray(res.products) ? res.products : res.products || []); } catch (e) { setError(e.message || 'Error'); } finally { setLoading(false); } })(); }} variant="outline" disabled={loading}>Resetear</Button>
         </div>
       </div>
 
@@ -168,9 +160,9 @@ export default function ProductsPage() {
             <span className="text-sm font-medium text-petzi">$ {p.price}</span>
             <div className="mt-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Link to={`/products/${p.id}`} className="text-sm px-2 py-1 border rounded bg-green-400 text-white hover:bg-green-700">Ver</Link>
-                <button onClick={() => openEdit(p)} className="text-sm px-2 py-1 border rounded bg-blue-400 text-white hover:bg-blue-700">Editar</button>
-                <button onClick={() => deleteProduct(p.id)} className="text-sm px-2 py-1 border rounded text-white bg-red-400 hover:bg-red-700">Eliminar</button>
+                <Link to={`/products/${p.id}`} className="inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-violet-800 ring-1 ring-violet-200 hover:bg-violet-50 text-sm">Ver</Link>
+                <Button onClick={() => openEdit(p)} className="!px-3 !py-1.5 !text-sm" variant="soft">Editar</Button>
+                <Button onClick={() => deleteProduct(p.id)} className="!px-3 !py-1.5 !text-sm" variant="danger">Eliminar</Button>
               </div>
             </div>
           </div>

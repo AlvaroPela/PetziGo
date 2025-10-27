@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { api } from '../lib/api';
+import { Input, Select, Textarea, Button } from './FormComponents';
 
 // --- Constants ---
 const CATEGORY_OPTIONS = [
@@ -80,47 +81,29 @@ export default function ProductForm({ initial = null, onSaved, onCancel }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <h2 className="text-xl font-semibold">{initial?.id ? 'Editar producto' : 'Nuevo producto'}</h2>
-      {error && <div className="text-sm text-red-600">{error}</div>}
+      {error && <div className="text-sm text-rose-600">{error}</div>}
 
-      <div>
-        <label className="block text-sm font-medium">Nombre</label>
-        <input ref={firstInput} value={name} onChange={(e) => setName(e.target.value)} className="mt-1 block w-full border rounded px-3 py-2" />
+      <Input label="Nombre" value={name} onChange={setName} placeholder="Nombre del producto" />
+
+      <Textarea label="Descripción" value={description} onChange={setDescription} rows={3} placeholder="Describe el producto" />
+
+      <Select
+        label="Categoría"
+        value={category}
+        onChange={setCategory}
+        options={[{ label: '-- Seleccione --', value: '' }, ...CATEGORY_OPTIONS.filter(c => c.value !== '').map(c => ({ label: c.label, value: c.value }))]}
+      />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Input label="Precio" value={price} onChange={setPrice} inputMode="numeric" placeholder="0.00" />
+        <Input label="Stock" value={stock} onChange={setStock} type="number" min="0" />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium">Descripción</label>
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 block w-full border rounded px-3 py-2" rows={3} />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium">Categoría</label>
-        <select value={category} onChange={(e) => setCategory(e.target.value)} className="mt-1 block w-full border rounded px-3 py-2">
-          <option value="">-- Seleccione --</option>
-          {CATEGORY_OPTIONS.map((c) => (
-            <option key={c.value} value={c.value}>{c.label}</option>
-          ))}
-        </select>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-sm font-medium">Precio</label>
-          <input value={price} onChange={(e) => setPrice(e.target.value)} inputMode="numeric" className="mt-1 block w-full border rounded px-3 py-2" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium">Stock</label>
-          <input value={stock} onChange={(e) => setStock(e.target.value)} type="number" min="0" className="mt-1 block w-full border rounded px-3 py-2" />
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium">Registro INVIMA (opcional)</label>
-        <input value={invima} onChange={(e) => setInvima(e.target.value)} className="mt-1 block w-full border rounded px-3 py-2" />
-      </div>
+      <Input label="Registro INVIMA (opcional)" value={invima} onChange={setInvima} placeholder="Opcional" />
 
       <div className="flex items-center justify-end gap-2">
-        <button type="button" onClick={onCancel} className="px-4 py-2 rounded border">Cancelar</button>
-        <button type="submit" disabled={loading} className="px-4 py-2 rounded bg-petzi text-white disabled:opacity-60">{loading ? 'Guardando...' : initial?.id ? 'Actualizar' : 'Crear'}</button>
+        <Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button>
+        <Button type="submit" variant="primary" disabled={loading}>{loading ? 'Guardando...' : initial?.id ? 'Actualizar' : 'Crear'}</Button>
       </div>
     </form>
   );

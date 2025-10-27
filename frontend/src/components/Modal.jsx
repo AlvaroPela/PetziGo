@@ -52,11 +52,11 @@ export default function Modal({ isOpen, onClose, children, ariaLabel }) {
       {/* Modal content */}
       <div
         ref={overlayRef}
-        className="relative z-10 w-full max-w-2xl mx-4 bg-white rounded shadow-lg p-6"
+        className="relative z-10 w-full max-w-2xl mx-4 bg-white rounded-2xl shadow-xl p-6 ring-1 ring-slate-200"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <button
-          className="absolute top-3 right-3 text-gray-600 hover:text-gray-900"
+          className="absolute top-3 right-3 inline-flex h-8 w-8 items-center justify-center rounded-full text-violet-800 hover:bg-violet-50 focus:outline-none focus:ring-2 focus:ring-violet-300"
           aria-label="Cerrar"
           onClick={onClose}
         >

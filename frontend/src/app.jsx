@@ -56,6 +56,8 @@ export function App() {
 
 					<Route path="products" element={<ProductsPage />} />
 
+					<Route path="pets" element={<PetManagement />} />
+
 					{/* Protected Client Routes */}
 					<Route path="client" element={auth.token && auth.user?.role === "CLIENT" ? <ClientDashboard /> : <LoginScreen auth={auth} />}>
 						<Route index element={<ClientDashboard />} />

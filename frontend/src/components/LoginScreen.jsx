@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Input } from "./FormComponents";
+import { Input, Button } from "./FormComponents";
 import { toast } from "react-toastify";
 
 export default function LoginScreen({ auth, onDone, redirectTo = "/dashboard" }) {
@@ -54,16 +54,13 @@ export default function LoginScreen({ auth, onDone, redirectTo = "/dashboard" })
 						/>
 						{error && <p className="text-sm text-rose-600">{error}</p>}
 
-						<button
-							disabled={loading}
-							className="w-full rounded-xl bg-violet-700 px-4 py-2.5 font-semibold text-white hover:bg-violet-800 disabled:opacity-50"
-						>
+						<Button disabled={loading} className="w-full" variant="primary">
 							{loading ? "Ingresando…" : "Entrar"}
-						</button>
+						</Button>
 					</form>
 
 					<div className="flex items-center justify-between text-sm pt-2">
-						<button type="button" onClick={() => navigate("/register")} className="text-violet-700 hover:underline">
+						<button type="button" onClick={() => navigate("/register")} className="text-violet-800 hover:underline">
 							¿No tienes cuenta? Crear cuenta
 						</button>
 					</div>
