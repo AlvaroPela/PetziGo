@@ -26,6 +26,7 @@ import ProviderProfile from "./pages/provider/Profile";
 import AdminDashboard from "./pages/admin/Dashboard";
 import UserManagement from "./pages/admin/UserManagement";
 import NotFoundScreen from "./pages/public/NotFoundScreen";
+import ProductsPage from "./pages/public/ProductsPage";
 
 export function App() {
 	const auth = useAuth();
@@ -45,10 +46,15 @@ export function App() {
 					{/* Public Routes */}
 					<Route index element={<LandingPage />} />
 					<Route path="search" element={<SearchPage />} />
-					<Route path="services/:id" element={<ServiceDetails />} />
+
+					
 					<Route path="login" element={<LoginScreen auth={auth} />} />
 					<Route path="register" element={<RegisterPage />} />
+
+					<Route path="services/:id" element={<ServiceDetails />} />
 					<Route path="services" element={<ServicesPage />} />
+
+					<Route path="products" element={<ProductsPage />} />
 
 					{/* Protected Client Routes */}
 					<Route path="client" element={auth.token && auth.user?.role === "CLIENT" ? <ClientDashboard /> : <LoginScreen auth={auth} />}>
