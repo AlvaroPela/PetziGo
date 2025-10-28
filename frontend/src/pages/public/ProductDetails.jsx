@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Button } from '../../components/FormComponents';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { Button } from '../../components/FormComponents';
 
-const ServiceDetails = () => {
+const ProductDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const [service, setService] = useState(null);
+  const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -19,14 +19,10 @@ const ServiceDetails = () => {
       setLoading(true);
       setError(null);
       try {
-        const data = await api(`/services/${id}`);
-        if (!cancelled) {
-          setService(data?.service || null);
-        }
+        const data = await api(`/products/${id}`);
+        if (!cancelled) setProduct(data?.product || null);
       } catch (err) {
-        if (!cancelled) {
-          setError(err.message || 'Error al cargar el servicio');
-        }
+        if (!cancelled) setError(err.message || 'Error al cargar el producto');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -36,55 +32,36 @@ const ServiceDetails = () => {
     return () => { cancelled = true; };
   }, [id]);
 
-  const handleReserve = () => {
-    // Redirigir a ruta de reserva/checkout. Si no existe, lleva a una página placeholder.
-    navigate(`/services/${id}/book`);
+  const handleBuy = () => {
+    // redirect to a purchase/checkout page (to implement)
+    navigate(`/products/${id}/buy`);
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center text-gray-600">Cargando servicio...</div>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">Cargando producto...</div>
+  );
 
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center text-rose-600">Error: {error}</div>
-      </div>
-    );
-  }
+  if (error) return (
+    <div className="min-h-screen flex items-center justify-center text-rose-600">Error: {error}</div>
+  );
 
-  if (!service) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center text-gray-600">Servicio no encontrado</div>
-      </div>
-    );
-  }
+  if (!product) return (
+    <div className="min-h-screen flex items-center justify-center">Producto no encontrado</div>
+  );
 
-  const { title, description, price, provider_name, business_description, location_lat, location_lng, reviews } = service;
+  const { name, description, price, stock, category, provider_name, business_description, reviews, location_lat, location_lng } = product;
 
   return (
     <div className="min-h-screen bg-gray-100">
       <div className="container mx-auto p-4">
         <div className="bg-white rounded-lg shadow-lg p-6">
-          {/* Imágenes del servicio - usar placeholder si no hay campo de imagen */}
           <div className="mb-6">
-            <img
-              src={service.image_url || '/placeholder.jpg'}
-              alt={title}
-              onError={(e) => { e.target.src = '/placeholder.jpg'; }}
-              className="w-full h-64 object-cover rounded-lg"
-            />
+            <img src={product.image_url || '/placeholder.jpg'} alt={name} onError={(e) => { e.target.src = '/placeholder.jpg'; }} className="w-full h-64 object-cover rounded-lg" />
           </div>
 
-          {/* Información del servicio */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-2">
-              <h1 className="text-3xl font-bold mb-2">{title}</h1>
+              <h1 className="text-3xl font-bold mb-2">{name}</h1>
               <div className="text-sm text-slate-600 mb-4">Por: {provider_name}</div>
               <p className="text-gray-600 mb-4">{description}</p>
 
@@ -95,21 +72,10 @@ const ServiceDetails = () => {
                 </div>
               )}
 
-              {/* Características (si existen como arreglo) */}
-              {service.features && Array.isArray(service.features) && (
-                <div className="mb-6">
-                  <h2 className="text-xl font-semibold mb-2">Características</h2>
-                  <ul className="list-disc list-inside">
-                    {service.features.map((f, idx) => <li key={idx}>{f}</li>)}
-                  </ul>
-                </div>
-              )}
-
-              {/* Reseñas */}
               <div>
                 <h2 className="text-xl font-semibold mb-2">Reseñas</h2>
                 {reviews && reviews.length > 0 ? (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {reviews.map((r, i) => (
                       <div key={i} className="border rounded-lg p-3">
                         <div className="flex items-center justify-between">
@@ -127,14 +93,12 @@ const ServiceDetails = () => {
               </div>
             </div>
 
-            {/* Panel de reserva */}
             <div className="bg-gray-50 p-4 rounded-lg">
               <div className="sticky top-4">
                 <h3 className="text-2xl font-bold mb-2">${Number(price).toFixed(2)}</h3>
-                <Button className="w-full mb-4" variant="primary" onClick={handleReserve}>Reservar Ahora</Button>
+                <div className="text-sm text-slate-600 mb-4">{stock > 0 ? `En stock: ${stock}` : 'Agotado'}</div>
+                <Button className="w-full mb-4" variant="primary" onClick={handleBuy} disabled={stock <= 0}>Comprar</Button>
                 <div className="text-sm text-gray-600">
-                  <p>✓ Reserva Instantánea</p>
-                  <p>✓ Garantía de Servicio</p>
                   <p>✓ Pago Seguro</p>
                 </div>
 
@@ -153,4 +117,4 @@ const ServiceDetails = () => {
   );
 };
 
-export default ServiceDetails;
+export default ProductDetails;

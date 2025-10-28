@@ -115,6 +115,19 @@ router.get('/:id', async (req, res) => {
   try {
     const serviceId = req.params.id;
 
+    // PENDIENTE para cuando se implemnte la activacion y desactivacions del provedor
+    // const [[service]] = await pool.query(
+    //   `SELECT s.*, u.name as provider_name,
+    //           pp.business_description, pp.average_rating, pp.total_reviews,
+    //           pp.location_lat, pp.location_lng
+    //    FROM services s
+    //    INNER JOIN users u ON s.provider_id = u.id
+    //    INNER JOIN provider_profiles pp ON s.provider_id = pp.user_id
+    //    WHERE s.id = ? AND s.active = 1
+    //    AND u.status = 'ACTIVE' AND pp.verified = 1`,
+    //   [serviceId]
+    // );
+
     const [[service]] = await pool.query(
       `SELECT s.*, u.name as provider_name,
               pp.business_description, pp.average_rating, pp.total_reviews,
@@ -123,7 +136,7 @@ router.get('/:id', async (req, res) => {
        INNER JOIN users u ON s.provider_id = u.id
        INNER JOIN provider_profiles pp ON s.provider_id = pp.user_id
        WHERE s.id = ? AND s.active = 1
-       AND u.status = 'ACTIVE' AND pp.verified = 1`,
+       AND u.status = 'ACTIVE'`,
       [serviceId]
     );
 

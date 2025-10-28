@@ -10,6 +10,8 @@ import Layout from "./components/Layout";
 import LandingPage from "./pages/public/LandingPage";
 import SearchPage from "./pages/public/SearchPage";
 import ServiceDetails from "./pages/public/ServiceDetails";
+import ServiceBooking from "./pages/public/ServiceBooking";
+import ProductDetails from "./pages/public/ProductDetails";
 import LoginScreen from "./components/LoginScreen";
 import ServicesPage from "./pages/public/ServicesPage";
 import RegisterPage from "./pages/auth/Register";
@@ -17,6 +19,7 @@ import RegisterPage from "./pages/auth/Register";
 // Client Pages
 import ClientDashboard from "./pages/client/Dashboard";
 import PetManagement from "./pages/client/PetManagement";
+import RequireRole from "./auth/RequireRole";
 
 // Provider Pages
 import ProviderDashboard from "./pages/provider/Dashboard";
@@ -27,6 +30,7 @@ import AdminDashboard from "./pages/admin/Dashboard";
 import UserManagement from "./pages/admin/UserManagement";
 import NotFoundScreen from "./pages/public/NotFoundScreen";
 import ProductsPage from "./pages/public/ProductsPage";
+import DashboardRedirect from './auth/DashboardRedirect';
 
 export function App() {
 	const auth = useAuth();
@@ -52,26 +56,27 @@ export function App() {
 					<Route path="register" element={<RegisterPage />} />
 
 					<Route path="services/:id" element={<ServiceDetails />} />
+					<Route path="services/:id/book" element={<ServiceBooking />} />
+					<Route path="products/:id" element={<ProductDetails />} />
 					<Route path="services" element={<ServicesPage />} />
+					<Route path="dashboard" element={<DashboardRedirect />} />
 
-					<Route path="products" element={<ProductsPage />} />
-
-					<Route path="pets" element={<PetManagement />} />
+					<Route path="products" element={<ProductsPage />} />					
 
 					{/* Protected Client Routes */}
-					<Route path="client" element={auth.token && auth.user?.role === "CLIENT" ? <ClientDashboard /> : <LoginScreen auth={auth} />}>
+					<Route path="client" element={<RequireRole allowedRoles={["CLIENT"]} />}>
 						<Route index element={<ClientDashboard />} />
 						<Route path="pets" element={<PetManagement />} />
 					</Route>
 
 					{/* Protected Provider Routes */}
-					<Route path="provider" element={auth.token && auth.user?.role === "PROVIDER" ? <ProviderDashboard /> : <LoginScreen auth={auth} />}>
+					<Route path="provider" element={<RequireRole allowedRoles={["PROVIDER"]} />}>
 						<Route index element={<ProviderDashboard />} />
 						<Route path="profile" element={<ProviderProfile />} />
 					</Route>
 
 					{/* Protected Admin Routes */}
-					<Route path="admin" element={auth.token && auth.user?.role === "ADMIN" ? <AdminDashboard /> : <LoginScreen auth={auth} />}>
+					<Route path="admin" element={<RequireRole allowedRoles={["ADMIN"]} />}>
 						<Route index element={<AdminDashboard />} />
 						<Route path="users" element={<UserManagement />} />
 					</Route>

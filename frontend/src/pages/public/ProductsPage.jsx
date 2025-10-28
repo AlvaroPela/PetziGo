@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import Modal from '../../components/Modal';
 import ProductForm from '../../components/ProductForm';
 import { api } from '../../lib/api';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Input, Select, Button } from '../../components/FormComponents';
+import { useAuth } from '../../auth/AuthProvider';
 // --- Constants ---
 const CATEGORY_OPTIONS = [
   { label: 'Todas', value: '' },
@@ -30,6 +31,10 @@ export default function ProductsPage() {
   const [search, setSearch] = useState('');
   const [providerId, setProviderId] = useState('');
   const [filterError, setFilterError] = useState(null);
+
+  const auth = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     let mounted = true;
@@ -81,8 +86,31 @@ export default function ProductsPage() {
     }
   }
 
-  function openCreate() { setEditing(null); setOpen(true); }
-  function openEdit(p) { setEditing(p); setOpen(true); }
+  function openCreate() {
+    if (!auth.user) {
+      navigate('/login', { state: { from: location.pathname } });
+      return;
+    }
+    if (auth.user.role !== 'PROVIDER') {
+      window.alert('Solo proveedores pueden crear productos.');
+      return;
+    }
+    setEditing(null);
+    setOpen(true);
+  }
+
+  function openEdit(p) {
+    if (!auth.user) {
+      navigate('/login', { state: { from: location.pathname } });
+      return;
+    }
+    if (auth.user.role !== 'PROVIDER') {
+      window.alert('No tienes permisos para editar productos.');
+      return;
+    }
+    setEditing(p);
+    setOpen(true);
+  }
 
   function handleSaved(savedProduct) {
     setProducts((prev) => {
@@ -112,7 +140,9 @@ export default function ProductsPage() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">Productos</h1>
         <div className="flex items-center gap-2">
-          <Button onClick={openCreate}>Nuevo producto</Button>
+            {auth.user && auth.user.role === 'PROVIDER' && (
+              <Button onClick={openCreate}>Nuevo producto</Button>
+            )}
         </div>
       </div>
 
@@ -161,8 +191,12 @@ export default function ProductsPage() {
             <div className="mt-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Link to={`/products/${p.id}`} className="inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-violet-800 ring-1 ring-violet-200 hover:bg-violet-50 text-sm">Ver</Link>
-                <Button onClick={() => openEdit(p)} className="!px-3 !py-1.5 !text-sm" variant="soft">Editar</Button>
-                <Button onClick={() => deleteProduct(p.id)} className="!px-3 !py-1.5 !text-sm" variant="danger">Eliminar</Button>
+                {auth.user && auth.user.role === 'PROVIDER' && (
+                  <>
+                    <Button onClick={() => openEdit(p)} className="!px-3 !py-1.5 !text-sm" variant="soft">Editar</Button>
+                    <Button onClick={() => deleteProduct(p.id)} className="!px-3 !py-1.5 !text-sm" variant="danger">Eliminar</Button>
+                  </>
+                )}
               </div>
             </div>
           </div>

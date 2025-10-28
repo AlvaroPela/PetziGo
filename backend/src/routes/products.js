@@ -113,6 +113,61 @@ router.get('/', [
   }
 });
 
+// Obtener un producto específico
+router.get('/:id', async (req, res) => {
+	console.log('[products] GET /:id - id:', req.params.id);
+	try {
+		const productId = req.params.id;
+
+		const [[productRow]] = await pool.query(
+			`SELECT p.*, u.name as provider_name, pp.business_description, pp.average_rating, pp.total_reviews, pp.location_lat, pp.location_lng
+			 FROM products p
+			 INNER JOIN users u ON p.provider_id = u.id
+			 LEFT JOIN provider_profiles pp ON p.provider_id = pp.user_id
+			 WHERE p.id = ? AND p.active = 1`,
+			[productId]
+		);
+
+		if (!productRow) {
+			console.warn('[products] product not found id:', productId);
+			return res.status(404).json({ message: 'Producto no encontrado' });
+		}
+
+		// Obtener reseñas del proveedor (si aplica)
+		const [reviews] = await pool.query(
+			`SELECT r.rating, r.comment, r.created_at, u.name as client_name
+			 FROM reviews r
+			 INNER JOIN users u ON r.client_id = u.id
+			 WHERE r.provider_id = ? AND r.status = 'APPROVED'
+			 ORDER BY r.created_at DESC
+			 LIMIT 10`,
+			[productRow.provider_id]
+		);
+
+		const product = {
+			id: productRow.id,
+			name: productRow.name,
+			description: productRow.description,
+			price: Number(productRow.price),
+			stock: productRow.stock,
+			category: productRow.category,
+			invima_registration: productRow.invima_registration,
+			provider_name: productRow.provider_name,
+			business_description: productRow.business_description,
+			average_rating: productRow.average_rating,
+			total_reviews: productRow.total_reviews,
+			location_lat: productRow.location_lat,
+			location_lng: productRow.location_lng,
+			reviews,
+		};
+
+		res.json({ product });
+	} catch (err) {
+		console.error('Error al obtener producto:', err);
+		res.status(500).json({ message: 'Error al obtener producto' });
+	}
+});
+
 /**
  * GET /products/mine
  * - productos del proveedor autenticado

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../../lib/api";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import Modal from "../../components/Modal";
 import ServiceForm from "../../components/ServiceForm";
 import { Input, Select, Button } from "../../components/FormComponents";
+import { useAuth } from "../../auth/AuthProvider";
 
 const CATEGORY_OPTIONS = [
 	{ label: "Todas", value: "" },
@@ -24,10 +25,15 @@ const RATING_OPTIONS = [
 	{ label: "5", value: "5" },
 ];
 
+
 const ServicesPage = () => {
 	const [services, setServices] = useState([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState(null);
+
+	const auth = useAuth();
+	const navigate = useNavigate();
+	const location = useLocation();
 
 	// modal state
 	const [open, setOpen] = useState(false);
@@ -142,14 +148,30 @@ const ServicesPage = () => {
 	}
 
 	function openCreate() {
-		setEditing(null);
-		setOpen(true);
-	}
+			if (!auth.user) {
+				navigate('/login', { state: { from: location.pathname } });
+				return;
+			}
+			if (auth.user.role !== 'PROVIDER') {
+	 			window.alert('Solo proveedores pueden crear servicios.');
+	 			return;
+	 		}
+			setEditing(null);
+			setOpen(true);
+		}
 
 	function openEdit(service) {
-		setEditing(service);
-		setOpen(true);
-	}
+	 		if (!auth.user) {
+	 			navigate('/login', { state: { from: location.pathname } });
+	 			return;
+	 		}
+	 		if (auth.user.role !== 'PROVIDER') {
+	 			window.alert('No tienes permisos para editar este servicio.');
+	 			return;
+	 		}
+			setEditing(service);
+			setOpen(true);
+		}
 
 	// callback que pasa ServiceForm al guardar
 	function handleSaved(savedService) {
@@ -189,9 +211,11 @@ const ServicesPage = () => {
 			<div className="flex items-center justify-between mb-4">
 				<h1 className="text-2xl font-bold">Servicios</h1>
 				<div className="flex items-center gap-2">
-					<Button onClick={openCreate}>
-						Nuevo servicio
-					</Button>
+					{(auth.user && auth.user.role === 'PROVIDER') && (
+						<Button onClick={openCreate}>
+							Nuevo servicio
+						</Button>
+					)}
 				</div>
 			</div>
 
@@ -252,8 +276,12 @@ const ServicesPage = () => {
 						<div className="mt-3 flex items-center justify-between">
 							<div className="flex items-center gap-2">
 								<Link to={`/services/${s.id}`} className="inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-violet-800 ring-1 ring-violet-200 hover:bg-violet-50 text-sm">Ver</Link>
-								<Button onClick={() => openEdit(s)} className="!px-3 !py-1.5 !text-sm" variant="soft">Editar</Button>
-								<Button onClick={() => deleteService(s.id)} className="!px-3 !py-1.5 !text-sm" variant="danger">Eliminar</Button>
+								{(auth.user && auth.user.role === 'PROVIDER') && (
+									<>
+										<Button onClick={() => openEdit(s)} className="!px-3 !py-1.5 !text-sm" variant="soft">Editar</Button>
+										<Button onClick={() => deleteService(s.id)} className="!px-3 !py-1.5 !text-sm" variant="danger">Eliminar</Button>
+									</>
+								)}
 							</div>
 						</div>
 					</div>
