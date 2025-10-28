@@ -35,6 +35,7 @@ import productsRoutes from './routes/products.js';
 import ordersRoutes from './routes/orders.js';
 import documentsRoutes from './routes/documents.js';
 import reviewsRoutes from './routes/reviews.js';
+import paymentsRoutes from './routes/payments.js';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -43,6 +44,7 @@ app.use('/api/products', productsRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/documents', documentsRoutes);
 app.use('/api/reviews', reviewsRoutes);
+app.use('/api/payments', paymentsRoutes);
 
 app.get('/', (_req, res) => {
   res.send('PetziGo API activa. Usa /api/health o las rutas /api/*');

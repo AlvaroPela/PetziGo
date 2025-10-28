@@ -10,20 +10,23 @@ const creationValidations = [
   body('itemType').isIn(['SERVICE', 'PRODUCT']).withMessage('Tipo de item invalido'),
   body('itemId').isInt({ min: 1 }).withMessage('El item es obligatorio'),
   body('quantity').optional().isInt({ min: 1 }).withMessage('La cantidad debe ser un entero positivo'),
-  body('notes').optional().isLength({ max: 500 }).withMessage('Las notas no pueden exceder 500 caracteres')
+  body('notes').optional().isLength({ max: 500 }).withMessage('Las notas no pueden exceder 500 caracteres'),
+  // fecha y mascota para reservas de servicios
+  body('service_date').optional().isISO8601().withMessage('service_date debe ser una fecha ISO8601'),
+  body('petId').optional().isInt({ min: 1 }).withMessage('petId debe ser un entero')
 ];
 
-router.post('/', authRequired('USER'), creationValidations, async (req, res) => {
+router.post('/', authRequired('CLIENT'), creationValidations, async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
-  const { itemType, itemId, quantity = 1, notes } = req.body;
+  const { itemType, itemId, quantity = 1, notes, service_date, petId } = req.body;
 
   let providerId;
   if (itemType === 'SERVICE') {
     const [[service]] = await pool.query(
-      `SELECT id, provider_id FROM services WHERE id = ? AND active = 1 AND visible = 1`,
+      `SELECT id, provider_id FROM services WHERE id = ? AND active = 1`,
       [itemId]
     );
     if (!service) {
@@ -32,7 +35,7 @@ router.post('/', authRequired('USER'), creationValidations, async (req, res) => 
     providerId = service.provider_id;
   } else {
     const [[product]] = await pool.query(
-      `SELECT id, provider_id FROM products WHERE id = ? AND visible = 1`,
+      `SELECT id, provider_id FROM products WHERE id = ?`,
       [itemId]
     );
     if (!product) {
@@ -41,9 +44,31 @@ router.post('/', authRequired('USER'), creationValidations, async (req, res) => 
     providerId = product.provider_id;
   }
 
+  // Si es una reserva de servicio con fecha, validar que no sea en el pasado y que no haya otra reserva en la misma fecha/hora para el mismo proveedor
+  if (itemType === 'SERVICE' && service_date) {
+    const parsed = new Date(service_date);
+    if (isNaN(parsed.getTime())) {
+      return res.status(400).json({ message: 'service_date inválida' });
+    }
+    const now = new Date();
+    if (parsed.getTime() < now.getTime()) {
+      return res.status(400).json({ message: 'No se puede reservar en una fecha pasada' });
+    }
+
+    // Comprobación básica: no permitir otra orden con la misma service_date para el mismo proveedor y estado activo
+    const [existing] = await pool.query(
+      `SELECT id FROM orders WHERE provider_id = ? AND service_date = ? AND status IN ('PENDING','ACCEPTED','IN_PROGRESS') LIMIT 1`,
+      [providerId, parsed]
+    );
+    if (existing && existing.length > 0) {
+      return res.status(409).json({ message: 'El proveedor ya tiene una reserva en esa fecha/hora' });
+    }
+  }
+
+  // Insertamos la orden incluyendo campos opcionales de reserva (service_date, pet_id)
   const [result] = await pool.query(
-    `INSERT INTO orders (user_id, provider_id, item_type, service_id, product_id, quantity, status, notes)
-     VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?)` ,
+    `INSERT INTO orders (user_id, provider_id, item_type, service_id, product_id, quantity, status, notes, service_date, pet_id)
+     VALUES (?, ?, ?, ?, ?, ?, 'CREATED', ?, ?, ?)` ,
     [
       req.user.id,
       providerId,
@@ -51,7 +76,9 @@ router.post('/', authRequired('USER'), creationValidations, async (req, res) => 
       itemType === 'SERVICE' ? itemId : null,
       itemType === 'PRODUCT' ? itemId : null,
       quantity,
-      notes || null
+      notes || null,
+      service_date ? new Date(service_date) : null,
+      petId || null
     ]
   );
 

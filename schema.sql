@@ -90,19 +90,32 @@ CREATE TABLE IF NOT EXISTS products (
 );
 
 -- Pedidos
+-- Pedidos (ordenes: soporta servicios y productos)
 CREATE TABLE IF NOT EXISTS orders (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  client_id INT NOT NULL,
+  -- usuario que crea el pedido (antes 'client_id')
+  user_id INT NOT NULL,
   provider_id INT NOT NULL,
-  status ENUM('PENDING', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED') DEFAULT 'PENDING',
-  service_date DATETIME,
-  total_amount DECIMAL(10,2) NOT NULL,
+  -- tipo de item: SERVICE o PRODUCT
+  item_type ENUM('SERVICE','PRODUCT') DEFAULT NULL,
+  -- referencia al servicio o producto (según item_type)
+  service_id INT DEFAULT NULL,
+  product_id INT DEFAULT NULL,
+  quantity INT NOT NULL DEFAULT 1,
+  notes TEXT DEFAULT NULL,
+  status ENUM('CREATED','PENDING', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED') DEFAULT 'PENDING',
+  service_date DATETIME DEFAULT NULL,
+  total_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
   payment_status ENUM('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED') DEFAULT 'PENDING',
-  mercadopago_preference_id VARCHAR(255),
+  mercadopago_preference_id VARCHAR(255) DEFAULT NULL,
+  pet_id INT DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (client_id) REFERENCES users(id),
-  FOREIGN KEY (provider_id) REFERENCES provider_profiles(user_id)
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (provider_id) REFERENCES provider_profiles(user_id),
+  FOREIGN KEY (service_id) REFERENCES services(id),
+  FOREIGN KEY (product_id) REFERENCES products(id),
+  FOREIGN KEY (pet_id) REFERENCES pets(id)
 );
 -- Items de pedidos
 CREATE TABLE IF NOT EXISTS order_items (
