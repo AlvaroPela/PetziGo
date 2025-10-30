@@ -1,48 +1,30 @@
-import { Router } from "express";
-import mercadopago from "mercadopago";
+import { Router } from 'express';
+import dotenv from 'dotenv';
 import { pool } from '../config/db.js';
-import dotenv from "dotenv";
 
 dotenv.config();
 
 const router = Router();
 
-// --- MercadoPago v2 ---
-// 1) Crear el cliente con tu Access Token
-const mpClient = new mercadopago.MercadoPagoConfig({
-  accessToken: process.env.MP_ACCESS_TOKEN || ""
-});
-
-// 2) Usar la clase Preference para crear la preferencia
-const preferenceApi = new mercadopago.Preference(mpClient);
+// Helper: sanitize base URLs
+const normalizeUrl = (u) => (u || '').replace(/\/+$/, '');
 
 // POST /api/payments/create-preference
-// body: { title, quantity, unit_price, notification_url? }
-router.post("/create-preference", async (req, res) => {
+// Body: { title, quantity, unit_price, external_reference? }
+router.post('/create-preference', async (req, res) => {
   try {
-    const { title, quantity = 1, unit_price, notification_url } = req.body;
+    const { title, quantity = 1, unit_price, external_reference } = req.body;
 
-    // Validaciones mínimas
     if (!title || !unit_price) {
-      return res
-        .status(400)
-        .json({ message: "Faltan campos: title y unit_price son obligatorios." });
+      return res.status(400).json({ message: 'Faltan campos: title y unit_price son obligatorios.' });
     }
 
-    // FRONTEND_URL debe apuntar a la URL pública del frontend (ej. https://mi-front.example.com)
-    // BACKEND_URL debe apuntar a la URL pública del backend (ej. https://mi-back.example.com)
     const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL;
     const backendUrl = process.env.BACKEND_URL || process.env.APP_URL;
 
-    if (!frontendUrl) {
-      return res.status(500).json({ message: 'Server misconfiguration: FRONTEND_URL or APP_URL is not set. Set it to your frontend base URL (e.g. https://mi-front.example.com).' });
-    }
-    if (!backendUrl) {
-      return res.status(500).json({ message: 'Server misconfiguration: BACKEND_URL or APP_URL is not set. Set it to your backend base URL (e.g. https://mi-back.example.com).' });
-    }
+    if (!frontendUrl) return res.status(500).json({ message: 'FRONTEND_URL o APP_URL no configurada en el servidor.' });
+    if (!backendUrl) return res.status(500).json({ message: 'BACKEND_URL o APP_URL no configurada en el servidor.' });
 
-    // Para que MercadoPago haga auto-redirect con auto_return: 'approved', back_urls.success debe ser una URL válida
-    // y en producción normalmente requiere HTTPS. Validamos y damos una advertencia si no es así.
     const isFrontendHttps = /^https:\/\//i.test(frontendUrl);
 
     const body = {
@@ -50,96 +32,76 @@ router.post("/create-preference", async (req, res) => {
         {
           title: String(title),
           quantity: Number(quantity) || 1,
-          currency_id: "COP",
+          currency_id: 'COP',
           unit_price: Number(unit_price)
         }
       ],
       back_urls: {
-        success: `${frontendUrl.replace(/\/+$/, '')}/payments/success`,
-        failure: `${frontendUrl.replace(/\/+$/, '')}/payments/failure`,
-        pending: `${frontendUrl.replace(/\/+$/, '')}/payments/pending`
+        success: `${normalizeUrl(frontendUrl)}/payments/success`,
+        failure: `${normalizeUrl(frontendUrl)}/payments/failure`,
+        pending: `${normalizeUrl(frontendUrl)}/payments/pending`
       },
-      // notification_url debe apuntar al backend para recibir webhooks
-      notification_url: notification_url || `${backendUrl.replace(/\/+$/, '')}/api/payments/webhook`
+      auto_return: 'approved',
+      notification_url: `${normalizeUrl(backendUrl)}/api/payments/webhook`
     };
 
-    // Añadir external_reference si el frontend lo envía (ej. id de la orden)
-    if (req.body.external_reference) {
-      body.external_reference = String(req.body.external_reference);
-    }
+    if (external_reference) body.external_reference = String(external_reference);
 
-    // Habilitar auto_return solo si FRONTEND_URL es https — evita errores de MP en entornos locales
-    if (isFrontendHttps) {
-      body.auto_return = 'approved';
-    }
+    const mpToken = process.env.MP_ACCESS_TOKEN;
+    if (!mpToken) return res.status(500).json({ message: 'MP_ACCESS_TOKEN no configurado' });
 
-    const pref = await preferenceApi.create({ body });
+    const resp = await fetch('https://api.mercadopago.com/checkout/preferences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${mpToken}` },
+      body: JSON.stringify(body)
+    });
 
-    // Si el frontend pasó external_reference (id de la orden), guardar la preferencia en la orden
+    const data = await resp.json();
+
+    // Guardar el id de preferencia en la orden si external_reference fue provisto
     try {
-      if (pref && pref.id && body.external_reference) {
-        const orderId = body.external_reference;
-        await pool.query(
-          `UPDATE orders SET mercadopago_preference_id = ?, payment_status = ? WHERE id = ?`,
-          [pref.id, 'PROCESSING', orderId]
-        );
+      if (external_reference && data && data.id) {
+        await pool.query('UPDATE orders SET mercadopago_preference_id = ?, payment_status = ? WHERE id = ?', [data.id, 'PROCESSING', external_reference]);
       }
     } catch (dbErr) {
-      console.warn('[MP] no se pudo actualizar la orden con la preferencia:', dbErr.message || dbErr);
-      // no interrumpimos el flujo de preferencia por un fallo secundario en la BD
+      // No interrumpimos el flujo si la DB falla aquí
+      console.warn('[MP] no se pudo actualizar la orden con la preferencia:', dbErr?.message || dbErr);
     }
 
-    // En v2 la respuesta ya trae las propiedades en el objeto devuelto
-    return res.json({
-      id: pref.id,
-      init_point: pref.init_point,
-      sandbox_init_point: pref.sandbox_init_point,
-      raw: pref
-    });
-  } catch (e) {
-    console.error("[MP create-preference] ", e);
-    // Propagar mensaje de error más explícito si está disponible
-    const message = e?.message || 'Error creando preferencia de pago';
-    const status = e?.status || 500;
-    return res.status(status).json({ message });
+    return res.status(resp.status).json(data);
+  } catch (err) {
+    console.error('[MP create-preference] ', err);
+    return res.status(500).json({ message: 'Error creando preferencia', error: String(err) });
   }
 });
 
-// Webhook de MercadoPago (ejemplo mínimo)
-// Configura esta URL en tu preferencia o en el panel de MP (modo test)
-router.post("/webhook", async (req, res) => {
+// POST /api/payments/webhook
+// Maneja notificaciones simples de MercadoPago
+router.post('/webhook', async (req, res) => {
   try {
-    // Intentamos procesar notificaciones de MercadoPago.
-    // MercadoPago puede enviar distintos formatos; intentamos extraer un id de pago.
-    const paymentId = req.query.id || req.body?.data?.id || req.body?.id || req.body?.collection?.id;
+    // MercadoPago puede enviar varios payloads; intentamos extraer un payment_id o collection_id
+    const mpToken = process.env.MP_ACCESS_TOKEN;
+    if (!mpToken) return res.sendStatus(200);
+
+    // Algunos webhooks vienen con { type: 'payment', data: { id: '123' } }
+    const paymentId = req.body?.data?.id || req.body?.id || req.query?.id || null;
 
     if (!paymentId) {
-      console.warn('[MP webhook] notificación sin id detectada, payload:', JSON.stringify(req.body).slice(0, 200));
-      return res.sendStatus(200); // ACK para evitar reintentos infinitos
+      // Nothing to do; acknowledge
+      return res.sendStatus(200);
     }
 
-    const mpToken = process.env.MP_ACCESS_TOKEN;
-    if (!mpToken) {
-      console.error('[MP webhook] MP_ACCESS_TOKEN no configurado en el servidor');
-      return res.sendStatus(500);
-    }
-
-    // Consultar el detalle del pago en la API de MercadoPago
-    const resp = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+    const resp = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`, {
       headers: { Authorization: `Bearer ${mpToken}` }
     });
 
     if (!resp.ok) {
-      console.warn('[MP webhook] fallo al consultar payment:', resp.status, await resp.text());
       return res.sendStatus(200);
     }
 
     const paymentData = await resp.json();
-    // paymentData tiene campos: id, status, status_detail, preference_id, external_reference, etc.
-    const prefId = paymentData.preference_id || paymentData.order?.preference_id;
-    const externalRef = paymentData.external_reference || paymentData.order?.external_reference;
-    const status = (paymentData.status || '').toLowerCase();
 
+    const status = (paymentData.status || '').toLowerCase();
     let paymentStatus = 'PROCESSING';
     let orderStatus = null;
     if (status === 'approved' || status === 'paid') {
@@ -152,28 +114,148 @@ router.post("/webhook", async (req, res) => {
       orderStatus = 'CANCELLED';
     }
 
-    // Actualizar ordenes encontradas por preference_id o por external_reference (orderId)
+    const prefId = paymentData.preference_id || null;
+    const externalRef = paymentData.external_reference || null;
+
     try {
       if (prefId) {
-        await pool.query(
-          `UPDATE orders SET payment_status = ?, updated_at = NOW() ${orderStatus ? ', status = ?' : ''} WHERE mercadopago_preference_id = ?`,
-          orderStatus ? [paymentStatus, orderStatus, prefId] : [paymentStatus, prefId]
-        );
+        await pool.query('UPDATE orders SET payment_status = ?, updated_at = NOW() ' + (orderStatus ? ', status = ?' : '') + (paymentData.id ? ', mercadopago_payment_id = ?' : '') + ' WHERE mercadopago_preference_id = ?',
+          orderStatus ? (paymentData.id ? [paymentStatus, orderStatus, paymentData.id, prefId] : [paymentStatus, orderStatus, prefId]) : (paymentData.id ? [paymentStatus, paymentData.id, prefId] : [paymentStatus, prefId]));
       }
       if (externalRef) {
-        await pool.query(
-          `UPDATE orders SET payment_status = ?, updated_at = NOW() ${orderStatus ? ', status = ?' : ''} WHERE id = ?`,
-          orderStatus ? [paymentStatus, orderStatus, externalRef] : [paymentStatus, externalRef]
-        );
+        await pool.query('UPDATE orders SET payment_status = ?, updated_at = NOW() ' + (orderStatus ? ', status = ?' : '') + (paymentData.id ? ', mercadopago_payment_id = ?' : '') + ' WHERE id = ?',
+          orderStatus ? (paymentData.id ? [paymentStatus, orderStatus, paymentData.id, externalRef] : [paymentStatus, orderStatus, externalRef]) : (paymentData.id ? [paymentStatus, paymentData.id, externalRef] : [paymentStatus, externalRef]));
       }
     } catch (dbErr) {
-      console.error('[MP webhook] error actualizando orden:', dbErr.message || dbErr);
+      console.error('[MP webhook] error actualizando orden:', dbErr?.message || dbErr);
     }
 
     return res.sendStatus(200);
-  } catch (e) {
-    console.error("[MP webhook] ", e);
-    res.sendStatus(500);
+  } catch (err) {
+    console.error('[MP webhook] ', err);
+    return res.sendStatus(500);
+  }
+});
+
+// Endpoints de debug / apoyo
+router.get('/debug/preference/:prefId', async (req, res) => {
+  try {
+    const { prefId } = req.params;
+    const mpToken = process.env.MP_ACCESS_TOKEN;
+    if (!mpToken) return res.status(500).json({ message: 'MP_ACCESS_TOKEN no configurado' });
+
+    const url = `https://api.mercadopago.com/checkout/preferences/${encodeURIComponent(prefId)}`;
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${mpToken}` } });
+    const data = await resp.json();
+    return res.status(resp.status).json(data);
+  } catch (err) {
+    console.error('[MP debug preference] ', err);
+    return res.status(500).json({ message: 'Error consultando preferencia', error: String(err) });
+  }
+});
+
+router.get('/debug/payment/:paymentId', async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    const mpToken = process.env.MP_ACCESS_TOKEN;
+    if (!mpToken) return res.status(500).json({ message: 'MP_ACCESS_TOKEN no configurado' });
+
+    const resp = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`, {
+      headers: { Authorization: `Bearer ${mpToken}` }
+    });
+    const data = await resp.json();
+    return res.status(resp.status).json(data);
+  } catch (err) {
+    console.error('[MP debug payment] ', err);
+    return res.status(500).json({ message: 'Error consultando pago', error: String(err) });
+  }
+});
+
+router.get('/debug/search', async (req, res) => {
+  try {
+    const { external_reference } = req.query;
+    if (!external_reference) return res.status(400).json({ message: 'external_reference es requerido' });
+    const mpToken = process.env.MP_ACCESS_TOKEN;
+    if (!mpToken) return res.status(500).json({ message: 'MP_ACCESS_TOKEN no configurado' });
+
+    const paymentsResp = await fetch(`https://api.mercadopago.com/v1/payments/search?external_reference=${encodeURIComponent(external_reference)}`, {
+      headers: { Authorization: `Bearer ${mpToken}` }
+    });
+    const payments = await paymentsResp.json();
+
+    const moResp = await fetch(`https://api.mercadopago.com/merchant_orders/search?external_reference=${encodeURIComponent(external_reference)}`, {
+      headers: { Authorization: `Bearer ${mpToken}` }
+    });
+    const merchantOrders = await moResp.json();
+
+    return res.json({ payments, merchantOrders });
+  } catch (err) {
+    console.error('[MP debug search] ', err);
+    return res.status(500).json({ message: 'Error en búsqueda', error: String(err) });
+  }
+});
+
+// GET /api/payments/status/:orderId
+// Devuelve un resumen simple del estado del pago/merchant_order buscando por external_reference
+router.get('/status/:orderId', async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    if (!orderId) return res.status(400).json({ message: 'orderId es requerido en la ruta' });
+
+    const mpToken = process.env.MP_ACCESS_TOKEN;
+    if (!mpToken) return res.status(500).json({ message: 'MP_ACCESS_TOKEN no configurado' });
+
+    const paymentsResp = await fetch(`https://api.mercadopago.com/v1/payments/search?external_reference=${encodeURIComponent(orderId)}`, {
+      headers: { Authorization: `Bearer ${mpToken}` }
+    });
+    const payments = await paymentsResp.json();
+
+    const moResp = await fetch(`https://api.mercadopago.com/merchant_orders/search?external_reference=${encodeURIComponent(orderId)}`, {
+      headers: { Authorization: `Bearer ${mpToken}` }
+    });
+    const merchantOrders = await moResp.json();
+
+    let status = 'NOT_FOUND';
+    let payment = null;
+
+    if (payments && Array.isArray(payments.results) && payments.results.length > 0) {
+      payment = payments.results[0];
+      const st = (payment.status || '').toLowerCase();
+      if (st === 'approved' || st === 'paid') status = 'COMPLETED';
+      else if (st === 'pending') status = 'PROCESSING';
+      else status = 'FAILED';
+    } else if (merchantOrders && Array.isArray(merchantOrders.results) && merchantOrders.results.length > 0) {
+      const mo = merchantOrders.results[0];
+      const moPayments = Array.isArray(mo.payments) ? mo.payments : [];
+      const anyApproved = moPayments.some(p => ['approved', 'paid'].includes((p.status || '').toLowerCase()));
+      if (anyApproved) status = 'COMPLETED';
+      else status = moPayments.length ? 'PROCESSING' : 'NOT_FOUND';
+      if (moPayments.length > 0 && !payment) payment = moPayments[0];
+    }
+
+    if (status === 'COMPLETED') {
+      try {
+        const mpId = payment?.id || null;
+        const prefId = payment?.preference_id || payment?.preference?.id || null;
+
+        const sets = ['payment_status = ?', 'updated_at = NOW()'];
+        const params = ['COMPLETED'];
+        if (mpId) { sets.push('mercadopago_payment_id = ?'); params.push(mpId); }
+        if (prefId) { sets.push('mercadopago_preference_id = ?'); params.push(prefId); }
+        sets.push('status = ?'); params.push('COMPLETED');
+        params.push(orderId);
+
+        const sql = `UPDATE orders SET ${sets.join(', ')} WHERE id = ?`;
+        await pool.query(sql, params);
+      } catch (dbErr) {
+        console.error('[MP status] error actualizando orden en BD:', dbErr?.message || dbErr);
+      }
+    }
+
+    return res.json({ external_reference: orderId, status, payment, merchantOrders });
+  } catch (err) {
+    console.error('[MP status] ', err);
+    return res.status(500).json({ message: 'Error consultando estado', error: String(err) });
   }
 });
 

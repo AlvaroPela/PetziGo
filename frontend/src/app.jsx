@@ -11,6 +11,8 @@ import LandingPage from "./pages/public/LandingPage";
 import SearchPage from "./pages/public/SearchPage";
 import ServiceDetails from "./pages/public/ServiceDetails";
 import ServiceBooking from "./pages/public/ServiceBooking";
+import PaymentsResult from "./pages/public/PaymentsResult";
+import PaymentsWaiting from "./pages/public/PaymentsWaiting";
 import ProductDetails from "./pages/public/ProductDetails";
 import LoginScreen from "./components/LoginScreen";
 import ServicesPage from "./pages/public/ServicesPage";
@@ -57,6 +59,8 @@ export function App() {
 
 					<Route path="services/:id" element={<ServiceDetails />} />
 					<Route path="services/:id/book" element={<ServiceBooking />} />
+					<Route path="payments/wait" element={<PaymentsWaiting />} />
+					<Route path="payments/success" element={<PaymentsResult />} />
 					<Route path="products/:id" element={<ProductDetails />} />
 					<Route path="services" element={<ServicesPage />} />
 					<Route path="dashboard" element={<DashboardRedirect />} />

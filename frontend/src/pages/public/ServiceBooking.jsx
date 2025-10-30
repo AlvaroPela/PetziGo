@@ -111,6 +111,8 @@ const ServiceBooking = () => {
 			if (res?.id) {
 				// Crear preferencia de MercadoPago para redirigir al checkout
 					try {
+						// Guardar orden actual para que la página de retorno pueda consultarla
+						try { localStorage.setItem('currentOrderId', String(res.id)); } catch (e) { /* ignore */ }
 						const prefBody = {
 							title: service.title || `Reserva #${res.id}`,
 							quantity: Number(quantity) || 1,
@@ -121,8 +123,23 @@ const ServiceBooking = () => {
 						// pref debe traer init_point (o sandbox_init_point)
 						const redirectUrl = pref?.init_point || pref?.sandbox_init_point;
 						if (redirectUrl) {
-							// Redirigir al checkout de MercadoPago
-							window.location.href = redirectUrl;
+							// Abrir el checkout en una ventana nueva y mantener la original en espera
+							try {
+								const popup = window.open(redirectUrl, 'mp_checkout', 'width=900,height=700');
+								try {
+									// Guardar referencias para la pantalla de espera
+									window.__mpPopupRef = popup;
+									window.__mpCurrentOrderId = String(res.id);
+									localStorage.setItem(`mp_init_point_${res.id}`, redirectUrl);
+									const deadline = Date.now() + 5 * 60 * 1000; // 5 minutos
+									localStorage.setItem(`mp_wait_deadline_${res.id}`, String(deadline));
+								  } catch (e) { /* ignore */ }
+							} catch (oerr) {
+								window.location.href = redirectUrl;
+								return;
+							}
+							// Navegar la ventana original a la página de espera para que muestre spinner y botón de verificar
+							navigate(`/payments/wait?external_reference=${encodeURIComponent(res.id)}`);
 							return;
 						}
 						// Si no hay redirectUrl, mostrar error y quedarse en la página
