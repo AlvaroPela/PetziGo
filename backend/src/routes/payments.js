@@ -127,7 +127,19 @@ router.post('/webhook', async (req, res) => {
           orderStatus ? (paymentData.id ? [paymentStatus, orderStatus, paymentData.id, externalRef] : [paymentStatus, orderStatus, externalRef]) : (paymentData.id ? [paymentStatus, paymentData.id, externalRef] : [paymentStatus, externalRef]));
       }
     } catch (dbErr) {
-      console.error('[MP webhook] error actualizando orden:', dbErr?.message || dbErr);
+      const msg = dbErr?.message || String(dbErr);
+      console.error('[MP webhook] error actualizando orden:', msg);
+      // Intentar fallback: marcar payment_status = 'PROCESSING' para que la orden quede en estado pendiente
+      try {
+        if (prefId) {
+          await pool.query('UPDATE orders SET payment_status = ?, updated_at = NOW() WHERE mercadopago_preference_id = ?', ['PROCESSING', prefId]);
+        }
+        if (externalRef) {
+          await pool.query('UPDATE orders SET payment_status = ?, updated_at = NOW() WHERE id = ?', ['PROCESSING', externalRef]);
+        }
+      } catch (fallbackErr) {
+        console.error('[MP webhook] fallback error marcando PROCESSING:', fallbackErr?.message || String(fallbackErr));
+      }
     }
 
     return res.sendStatus(200);
@@ -215,7 +227,7 @@ router.get('/status/:orderId', async (req, res) => {
     });
     const merchantOrders = await moResp.json();
 
-    let status = 'NOT_FOUND';
+  let status = 'AWAITING_PAYMENT'; // user-friendly: waiting for payment evidence
     let payment = null;
 
     if (payments && Array.isArray(payments.results) && payments.results.length > 0) {
@@ -233,6 +245,8 @@ router.get('/status/:orderId', async (req, res) => {
       if (moPayments.length > 0 && !payment) payment = moPayments[0];
     }
 
+    let dbUpdated = false;
+    let dbError = null;
     if (status === 'COMPLETED') {
       try {
         const mpId = payment?.id || null;
@@ -247,12 +261,24 @@ router.get('/status/:orderId', async (req, res) => {
 
         const sql = `UPDATE orders SET ${sets.join(', ')} WHERE id = ?`;
         await pool.query(sql, params);
-      } catch (dbErr) {
-        console.error('[MP status] error actualizando orden en BD:', dbErr?.message || dbErr);
+        dbUpdated = true;
+      } catch (dbErrInner) {
+        dbError = dbErrInner?.message || String(dbErrInner);
+        dbUpdated = false;
+        console.error('[MP status] error actualizando orden en BD:', dbError);
+        // Intentar fallback: marcar payment_status = 'PROCESSING' para no dejar la orden en un estado inconsistente
+        try {
+          await pool.query('UPDATE orders SET payment_status = ?, updated_at = NOW() WHERE id = ?', ['PROCESSING', orderId]);
+        } catch (fallbackErr) {
+          console.error('[MP status] fallback error marcando PROCESSING:', fallbackErr?.message || String(fallbackErr));
+        }
       }
     }
+    const user_message = status === 'AWAITING_PAYMENT'
+      ? 'No se encontró evidencia de pago. Por favor completa el pago en la ventana de MercadoPago o pulsa "Verificar pago".'
+      : undefined;
 
-    return res.json({ external_reference: orderId, status, payment, merchantOrders });
+    return res.json({ external_reference: orderId, status, payment, merchantOrders, dbUpdated, dbError, user_message });
   } catch (err) {
     console.error('[MP status] ', err);
     return res.status(500).json({ message: 'Error consultando estado', error: String(err) });

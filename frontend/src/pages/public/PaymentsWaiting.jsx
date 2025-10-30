@@ -28,6 +28,13 @@ const PaymentsWaiting = () => {
           const data = JSON.parse(e.newValue);
           setInfo(data);
           setStatus(data.status || 'UNKNOWN');
+          // Si la popup indicó que el pago quedó COMPLETED, llamar al backend
+          // para que actualice la orden en la base de datos.
+          if ((data.status || '').toUpperCase() === 'COMPLETED') {
+            // Llamamos a verifyNow que consulta /api/payments/status/:orderId
+            // y además persiste el resultado en localStorage.
+            verifyNow();
+          }
         } catch (err) {
           // ignore
         }
@@ -77,8 +84,8 @@ const PaymentsWaiting = () => {
     setChecking(true);
     try {
       const res = await api(`/payments/status/${encodeURIComponent(orderId)}`);
-      setInfo(res);
-      setStatus(res.status || 'NOT_FOUND');
+  setInfo(res);
+  setStatus(res.status || 'AWAITING_PAYMENT');
       // Save to localStorage so popup/opener syncs
       try { localStorage.setItem(`mp_payment_result_${orderId}`, JSON.stringify(res)); } catch (e) { /* ignore */ }
     } catch (err) {
@@ -172,7 +179,7 @@ const PaymentsWaiting = () => {
             {status === 'COMPLETED' && info && (
               <Receipt data={info} />
             )}
-            {status === 'NOT_FOUND' && (
+            {(status === 'NOT_FOUND' || status === 'AWAITING_PAYMENT') && (
               <div className="text-sm text-slate-600">No se ha validado el pago aún. Por favor completa el pago en la ventana emergente.</div>
             )}
             {status === 'PROCESSING' && (
