@@ -10,7 +10,6 @@ services:
     volumes:
       - db_data:/var/lib/mysql
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
-      - ./backend/sql/add_mercadopago_payment_id.sql:/docker-entrypoint-initdb.d/add_mercadopago_payment_id.sql:ro
     ports:
       - "${DB_PORT:-3306}:3306"
     healthcheck:

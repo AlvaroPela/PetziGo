@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS services (
   provider_id INT NOT NULL,
   title VARCHAR(140) NOT NULL,
   description TEXT NOT NULL,
+  image_url VARCHAR(255),
   price DECIMAL(10,2) NOT NULL,
   category ENUM('PASEO','VETERINARIA','ENTRENAMIENTO','ESTETICA','GUARDERIA','OTRO') NOT NULL,
   available BOOLEAN DEFAULT TRUE,
@@ -103,12 +104,14 @@ CREATE TABLE IF NOT EXISTS orders (
   product_id INT DEFAULT NULL,
   quantity INT NOT NULL DEFAULT 1,
   notes TEXT DEFAULT NULL,
-  status ENUM('CREATED','PENDING', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED') DEFAULT 'PENDING',
+  address VARCHAR(255) DEFAULT NULL,
+  status ENUM('CREATED','PENDING', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'DELIVERED') DEFAULT 'PENDING',
   service_date DATETIME DEFAULT NULL,
   total_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
   payment_status ENUM('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED') DEFAULT 'PENDING',
   mercadopago_preference_id VARCHAR(255) DEFAULT NULL,
   mercadopago_payment_id VARCHAR(255) DEFAULT NULL,
+  delivered_at DATETIME DEFAULT NULL,
   pet_id INT DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -118,6 +121,7 @@ CREATE TABLE IF NOT EXISTS orders (
   FOREIGN KEY (product_id) REFERENCES products(id),
   FOREIGN KEY (pet_id) REFERENCES pets(id)
 );
+
 -- Items de pedidos
 CREATE TABLE IF NOT EXISTS order_items (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -162,3 +166,4 @@ CREATE INDEX idx_orders_status ON orders(status);
 CREATE INDEX idx_orders_dates ON orders(service_date);
 CREATE INDEX idx_provider_location ON provider_profiles(location_lat, location_lng);
 CREATE INDEX idx_reviews_provider ON reviews(provider_id);
+CREATE INDEX idx_orders_mp_payment_id ON orders(mercadopago_payment_id);

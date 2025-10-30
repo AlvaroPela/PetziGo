@@ -7,13 +7,14 @@ export async function api(path, { method = "GET", body, token } = {}) {
   console.info('[api] request', method, url, body ? { body } : {});
 
   try {
+    const isForm = (typeof FormData !== 'undefined') && body instanceof FormData;
     const res = await fetch(url, {
       method,
       headers: {
-        "Content-Type": "application/json",
+        ...(isForm ? {} : { "Content-Type": "application/json" }),
         ...(t ? { Authorization: `Bearer ${t}` } : {}),
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? (isForm ? body : JSON.stringify(body)) : undefined,
     });
 
     const text = await res.text().catch(() => null);

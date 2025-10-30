@@ -20,6 +20,7 @@ const ServiceBooking = () => {
 	const [serviceTime, setServiceTime] = useState("");
 	const [pets, setPets] = useState([]);
 	const [petId, setPetId] = useState("");
+	const [address, setAddress] = useState("");
 	const [petsLoading, setPetsLoading] = useState(false);
 	const { user, loading: authLoading } = useAuth();
 	const location = useLocation();
@@ -103,6 +104,7 @@ const ServiceBooking = () => {
 				notes: notes || undefined,
 				service_date: parsed.toISOString(),
 				petId: petId ? Number(petId) : undefined,
+				address: address || undefined,
 			};
 
 				const res = await api("/orders", { method: "POST", body });
@@ -110,10 +112,21 @@ const ServiceBooking = () => {
 			// Respuesta esperada: { id: <orderId>, status: 'PENDING' }
 			if (res?.id) {
 				// Crear preferencia de MercadoPago para redirigir al checkout
-					try {
-						// Guardar orden actual para que la página de retorno pueda consultarla
-						try { localStorage.setItem('currentOrderId', String(res.id)); } catch (e) { /* ignore */ }
-						const prefBody = {
+						try {
+							// Guardar orden actual para que la página de retorno pueda consultarla
+							try { localStorage.setItem('currentOrderId', String(res.id)); } catch (e) { /* ignore */ }
+							// Guardar un resumen local del pedido para recibo offline
+							try {
+								const summary = {
+									itemType: 'SERVICE',
+									title: service.title || `Reserva #${res.id}`,
+									unit_price: Number(service.price) || 0,
+									quantity: Number(quantity) || 1,
+									total: (Number(service.price) || 0) * (Number(quantity) || 1)
+								};
+								localStorage.setItem(`mp_order_summary_${res.id}`, JSON.stringify(summary));
+							} catch (e) { /* ignore */ }
+							const prefBody = {
 							title: service.title || `Reserva #${res.id}`,
 							quantity: Number(quantity) || 1,
 							unit_price: Number(service.price) || 0,
@@ -131,7 +144,7 @@ const ServiceBooking = () => {
 									window.__mpPopupRef = popup;
 									window.__mpCurrentOrderId = String(res.id);
 									localStorage.setItem(`mp_init_point_${res.id}`, redirectUrl);
-									const deadline = Date.now() + 5 * 60 * 1000; // 5 minutos
+									const deadline = Date.now() + 1 * 60 * 1000; // 5 minutos
 									localStorage.setItem(`mp_wait_deadline_${res.id}`, String(deadline));
 								  } catch (e) { /* ignore */ }
 							} catch (oerr) {
@@ -207,6 +220,8 @@ const ServiceBooking = () => {
 								</div>
 
 								<Textarea label="Notas (opcional)" value={notes} onChange={setNotes} rows={4} />
+
+								<Input label="Dirección del servicio (opcional)" value={address} onChange={setAddress} className="w-full" />
 
 								{error && <div className="text-rose-600">{error}</div>}
 

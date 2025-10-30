@@ -11,6 +11,7 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState(null);
 	const [errors, setErrors] = useState([]);
+	const [imageFile, setImageFile] = useState(null);
 	const firstInput = useRef(null);
 	const {user} = useAuth();
 
@@ -52,6 +53,20 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 			} else {
 				// crear
 				saved = await api("/services", { method: "POST", body: payload });
+			}
+
+			// Si hay imagen, subirla en segundo paso
+			if (imageFile) {
+				const serviceId = saved?.service?.id || initial?.id;
+				if (serviceId) {
+					const formData = new FormData();
+					formData.append('image', imageFile);
+					try {
+						await api(`/services/${serviceId}/image`, { method: 'POST', body: formData });
+					} catch (uploadErr) {
+						console.warn('Error subiendo imagen, se guarda el servicio sin imagen:', uploadErr);
+					}
+				}
 			}
 
 			// onSaved puede recibir el servicio creado/actualizado
@@ -109,6 +124,11 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 			<div>
 				<label className="block text-sm font-medium">Precio</label>
 				<Input value={price} onChange={setPrice} inputMode="numeric" placeholder="0.00" />
+			</div>
+
+			<div>
+				<label className="block text-sm font-medium">Imagen (opcional)</label>
+				<input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] || null)} className="mt-1 block text-sm" />
 			</div>
 
 			<div className="flex items-center justify-end gap-2">

@@ -2,6 +2,33 @@ import { Router } from 'express';
 import { body, query, validationResult } from 'express-validator';
 import { pool } from '../config/db.js';
 import { requireAuth, requireRole, requireVerifiedProvider, requireResourceOwnership } from '../middleware/auth.js';
+import multer from 'multer';
+import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Configuración de subida de imágenes de servicios
+const servicesStorage = multer.diskStorage({
+  destination: path.join(__dirname, '../../uploads/services'),
+  filename: (_req, file, cb) => {
+    cb(null, `${uuidv4()}${path.extname(file.originalname)}`);
+  }
+});
+
+const imageUpload = multer({
+  storage: servicesStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = /jpeg|jpg|png|webp/;
+    const ok = allowed.test(file.mimetype) && allowed.test(path.extname(file.originalname).toLowerCase());
+    if (ok) return cb(null, true);
+    cb(new Error('Formato de imagen no permitido (usa JPG, PNG o WEBP)'));
+  }
+});
 
 const router = Router();
 
@@ -301,3 +328,17 @@ router.delete('/:id', requireAuth, requireResourceOwnership('service'), async (r
 
 
 export default router;
+
+// Subir imagen de un servicio (propietario)
+router.post('/:id/image', requireAuth, requireResourceOwnership('service'), imageUpload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No se envió ninguna imagen' });
+    const serviceId = req.params.id;
+    const imageUrl = `/uploads/services/${req.file.filename}`;
+    await pool.query('UPDATE services SET image_url = ? WHERE id = ?', [imageUrl, serviceId]);
+    res.status(200).json({ ok: true, imageUrl });
+  } catch (err) {
+    console.error('Error subiendo imagen de servicio:', err);
+    res.status(500).json({ message: 'Error subiendo imagen de servicio' });
+  }
+});

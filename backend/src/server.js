@@ -2,6 +2,8 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { authRequired } from './middleware/auth.js';
 
 const app = express();
@@ -36,6 +38,7 @@ import ordersRoutes from './routes/orders.js';
 import documentsRoutes from './routes/documents.js';
 import reviewsRoutes from './routes/reviews.js';
 import paymentsRoutes from './routes/payments.js';
+import providersRoutes from './routes/providers.js';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -45,6 +48,12 @@ app.use('/api/orders', ordersRoutes);
 app.use('/api/documents', documentsRoutes);
 app.use('/api/reviews', reviewsRoutes);
 app.use('/api/payments', paymentsRoutes);
+app.use('/api/providers', providersRoutes);
+
+// Servir archivos estáticos subidos (imágenes, documentos)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.get('/', (_req, res) => {
   res.send('PetziGo API activa. Usa /api/health o las rutas /api/*');

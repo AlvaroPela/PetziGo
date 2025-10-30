@@ -191,6 +191,7 @@ export default function ProductsPage() {
             <div className="mt-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Link to={`/products/${p.id}`} className="inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-violet-800 ring-1 ring-violet-200 hover:bg-violet-50 text-sm">Ver</Link>
+                <Link to={`/products/${p.id}/buy`} className="inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-emerald-800 ring-1 ring-emerald-200 hover:bg-emerald-50 text-sm">Comprar</Link>
                 {auth.user && auth.user.role === 'PROVIDER' && (
                   <>
                     <Button onClick={() => openEdit(p)} className="!px-3 !py-1.5 !text-sm" variant="soft">Editar</Button>

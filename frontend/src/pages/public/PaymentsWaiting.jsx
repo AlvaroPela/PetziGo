@@ -17,6 +17,7 @@ const PaymentsWaiting = () => {
   const [checking, setChecking] = useState(false);
   const [popupClosed, setPopupClosed] = useState(false);
   const [timeLeft, setTimeLeft] = useState(300); // segundos
+  const [timeoutHandled, setTimeoutHandled] = useState(false);
   const storageKey = orderId ? `mp_payment_result_${orderId}` : null;
 
   useEffect(() => {
@@ -50,7 +51,7 @@ const PaymentsWaiting = () => {
     const key = `mp_wait_deadline_${orderId}`;
     let deadline = parseInt(localStorage.getItem(key) || '0', 10);
     if (!deadline || Number.isNaN(deadline)) {
-      deadline = Date.now() + 5 * 60 * 1000;
+      deadline = Date.now() + 1 * 60 * 1000;
       try { localStorage.setItem(key, String(deadline)); } catch (e) { /* ignore */ }
     }
     const interval = setInterval(() => {
@@ -95,6 +96,22 @@ const PaymentsWaiting = () => {
     }
   }
 
+  // Cuando expira el tiempo, cancelar en backend y redirigir
+  useEffect(() => {
+    async function handleTimeout() {
+      if (!orderId || timeoutHandled) return;
+      setTimeoutHandled(true);
+      try {
+        await api(`/payments/timeout-cancel/${encodeURIComponent(orderId)}`, { method: 'POST' });
+      } catch (e) { /* ignore */ }
+      alert('El tiempo de pago expiró. La orden fue cancelada.');
+      navigate('/client');
+    }
+    if (status === 'TIMEOUT') {
+      handleTimeout();
+    }
+  }, [status, orderId, timeoutHandled, navigate]);
+
   function Receipt({ data }) {
     if (!data) return null;
     const p = data.payment || (data.merchantOrders?.elements?.[0]?.payments?.[0]) || null;
@@ -103,6 +120,12 @@ const PaymentsWaiting = () => {
     const currency = payment?.currency_id || 'COP';
     const preference = payment?.preference_id || data.merchantOrders?.elements?.[0]?.preference_id || '—';
     const moId = data.merchantOrders?.elements?.[0]?.id || '—';
+    // Intentar complementar con resumen local
+    let summary = null;
+    try {
+      const raw = localStorage.getItem(`mp_order_summary_${data.external_reference}`);
+      if (raw) summary = JSON.parse(raw);
+    } catch (e) { /* ignore */ }
     return (
       <div className="bg-white border rounded p-4 text-slate-800">
         <div className="flex items-center justify-between mb-3">
@@ -115,6 +138,26 @@ const PaymentsWaiting = () => {
             <div className={`font-bold ${data.status === 'COMPLETED' ? 'text-emerald-600' : 'text-rose-600'}`}>{data.status}</div>
           </div>
         </div>
+        {summary && (
+          <div className="mb-3 grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <div className="text-slate-500">Concepto</div>
+              <div className="font-medium">{summary.title}</div>
+            </div>
+            <div>
+              <div className="text-slate-500">Cantidad</div>
+              <div className="font-medium">{summary.quantity}</div>
+            </div>
+            <div>
+              <div className="text-slate-500">Subtotal</div>
+              <div className="font-medium">{`${(summary.unit_price ?? 0) * (summary.quantity ?? 1)} ${currency}`}</div>
+            </div>
+            <div>
+              <div className="text-slate-500">Total</div>
+              <div className="font-medium">{`${summary.total ?? (summary.unit_price ?? 0) * (summary.quantity ?? 1)} ${currency}`}</div>
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
             <div className="text-slate-500">Pago ID</div>
@@ -130,7 +173,7 @@ const PaymentsWaiting = () => {
           </div>
           <div>
             <div className="text-slate-500">Monto</div>
-            <div className="font-medium">{amount ? `${amount} ${currency}` : '—'}</div>
+            <div className="font-medium">{amount ? `${amount} ${currency}` : (summary?.total ? `${summary.total} ${currency}` : '—')}</div>
           </div>
         </div>
       </div>
@@ -168,7 +211,15 @@ const PaymentsWaiting = () => {
             {status !== 'COMPLETED' && (
               <div className="flex items-center gap-4">
                 <div className="w-8 h-8 border-4 border-t-4 border-transparent border-t-amber-500 rounded-full animate-spin" aria-hidden="true"></div>
-                <div className="text-lg font-medium">{status === 'WAITING' ? 'Esperando pago...' : status}</div>
+                <div className="text-lg font-medium">
+                  {status === 'WAITING' && 'Esperando pago...'}
+                  {status === 'AWAITING_PAYMENT' && 'Aún no registramos tu pago'}
+                  {status === 'PROCESSING' && 'Pago en proceso'}
+                  {status === 'NOT_FOUND' && 'No se encontró información de pago aún'}
+                  {status === 'TIMEOUT' && 'Tiempo agotado'}
+                  {status === 'CANCELLED' && 'Pago cancelado'}
+                  {['WAITING','AWAITING_PAYMENT','PROCESSING','NOT_FOUND','TIMEOUT','CANCELLED'].includes(status) ? '' : status}
+                </div>
               </div>
             )}
 
@@ -180,7 +231,10 @@ const PaymentsWaiting = () => {
               <Receipt data={info} />
             )}
             {(status === 'NOT_FOUND' || status === 'AWAITING_PAYMENT') && (
-              <div className="text-sm text-slate-600">No se ha validado el pago aún. Por favor completa el pago en la ventana emergente.</div>
+              <div className="text-sm text-slate-600">Aún no registramos tu pago. Completa el pago en la ventana emergente o verifica más tarde.</div>
+            )}
+            {status === 'CANCELLED' && (
+              <div className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded p-2">Pago cancelado. Puedes iniciar el proceso nuevamente cuando quieras.</div>
             )}
             {status === 'PROCESSING' && (
               <div className="text-sm text-slate-600">Pago en proceso. Puedes verificar manualmente cuando desees.</div>

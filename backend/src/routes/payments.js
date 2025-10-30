@@ -9,6 +9,38 @@ const router = Router();
 // Helper: sanitize base URLs
 const normalizeUrl = (u) => (u || '').replace(/\/+$/, '');
 
+// Helper: consulta MP y si no hay pago aprobado, cancela orden en BD
+async function checkAndCancelIfUnpaid(orderId) {
+  const mpToken = process.env.MP_ACCESS_TOKEN;
+  if (!mpToken) return { ok: false, cancelled: false, reason: 'MP_ACCESS_TOKEN not set' };
+  try {
+    const paymentsResp = await fetch(`https://api.mercadopago.com/v1/payments/search?external_reference=${encodeURIComponent(orderId)}` , {
+      headers: { Authorization: `Bearer ${mpToken}` }
+    });
+    const payments = await paymentsResp.json();
+
+    let paid = false;
+    if (payments && Array.isArray(payments.results) && payments.results.length > 0) {
+      const payment = payments.results[0];
+      const st = (payment.status || '').toLowerCase();
+      if (st === 'approved' || st === 'paid') paid = true;
+    }
+
+    if (!paid) {
+      // Marcar en BD como cancelado/failed si aún no está completada
+      const [result] = await pool.query(
+        `UPDATE orders SET payment_status = 'FAILED', status = 'CANCELLED', updated_at = NOW()
+         WHERE id = ? AND status <> 'COMPLETED'`,
+        [orderId]
+      );
+      return { ok: true, cancelled: result.affectedRows > 0 };
+    }
+    return { ok: true, cancelled: false };
+  } catch (err) {
+    return { ok: false, cancelled: false, reason: err?.message || String(err) };
+  }
+}
+
 // POST /api/payments/create-preference
 // Body: { title, quantity, unit_price, external_reference? }
 router.post('/create-preference', async (req, res) => {
@@ -68,6 +100,16 @@ router.post('/create-preference', async (req, res) => {
       console.warn('[MP] no se pudo actualizar la orden con la preferencia:', dbErr?.message || dbErr);
     }
 
+    // Programar un timeout de 5 minutos para cancelar la orden si no hay pago
+    if (external_reference && resp.ok) {
+      const orderId = String(external_reference);
+      setTimeout(async () => {
+        try {
+          await checkAndCancelIfUnpaid(orderId);
+        } catch (_) { /* ignore */ }
+      }, 1 * 60 * 1000);
+    }
+
     return res.status(resp.status).json(data);
   } catch (err) {
     console.error('[MP create-preference] ', err);
@@ -105,10 +147,15 @@ router.post('/webhook', async (req, res) => {
     let paymentStatus = 'PROCESSING';
     let orderStatus = null;
     if (status === 'approved' || status === 'paid') {
+      // Pago aprobado: solo actualizamos payment_status, NO tocamos status de la orden
       paymentStatus = 'COMPLETED';
-      orderStatus = 'COMPLETED';
+      orderStatus = null;
     } else if (status === 'pending') {
       paymentStatus = 'PROCESSING';
+    } else if (status === 'cancelled' || status === 'canceled') {
+      // Cancelado por el usuario: dejamos payment_status como PENDING y orden CANCELLED
+      paymentStatus = 'PENDING';
+      orderStatus = 'CANCELLED';
     } else {
       paymentStatus = 'FAILED';
       orderStatus = 'CANCELLED';
@@ -227,15 +274,16 @@ router.get('/status/:orderId', async (req, res) => {
     });
     const merchantOrders = await moResp.json();
 
-  let status = 'AWAITING_PAYMENT'; // user-friendly: waiting for payment evidence
+  let status = 'AWAITING_PAYMENT'; // estado lógico para UI
     let payment = null;
 
     if (payments && Array.isArray(payments.results) && payments.results.length > 0) {
       payment = payments.results[0];
-      const st = (payment.status || '').toLowerCase();
-      if (st === 'approved' || st === 'paid') status = 'COMPLETED';
-      else if (st === 'pending') status = 'PROCESSING';
-      else status = 'FAILED';
+  const st = (payment.status || '').toLowerCase();
+  if (st === 'approved' || st === 'paid') status = 'COMPLETED';
+  else if (st === 'pending') status = 'PROCESSING';
+  else if (st === 'cancelled' || st === 'canceled') status = 'CANCELLED';
+  else status = 'FAILED';
     } else if (merchantOrders && Array.isArray(merchantOrders.results) && merchantOrders.results.length > 0) {
       const mo = merchantOrders.results[0];
       const moPayments = Array.isArray(mo.payments) ? mo.payments : [];
@@ -256,7 +304,6 @@ router.get('/status/:orderId', async (req, res) => {
         const params = ['COMPLETED'];
         if (mpId) { sets.push('mercadopago_payment_id = ?'); params.push(mpId); }
         if (prefId) { sets.push('mercadopago_preference_id = ?'); params.push(prefId); }
-        sets.push('status = ?'); params.push('COMPLETED');
         params.push(orderId);
 
         const sql = `UPDATE orders SET ${sets.join(', ')} WHERE id = ?`;
@@ -273,15 +320,42 @@ router.get('/status/:orderId', async (req, res) => {
           console.error('[MP status] fallback error marcando PROCESSING:', fallbackErr?.message || String(fallbackErr));
         }
       }
+    } else if (status === 'CANCELLED') {
+      try {
+        const sets = ['payment_status = ?', 'status = ?', 'updated_at = NOW()'];
+        const params = ['PENDING', 'CANCELLED', orderId];
+        const sql = `UPDATE orders SET ${sets.join(', ')} WHERE id = ?`;
+        await pool.query(sql, params);
+        dbUpdated = true;
+      } catch (dbErrInner) {
+        dbError = dbErrInner?.message || String(dbErrInner);
+        dbUpdated = false;
+        console.error('[MP status] error actualizando orden CANCELLED:', dbError);
+      }
     }
     const user_message = status === 'AWAITING_PAYMENT'
-      ? 'No se encontró evidencia de pago. Por favor completa el pago en la ventana de MercadoPago o pulsa "Verificar pago".'
+      ? 'Aún no registramos tu pago. Completa el pago en la ventana de MercadoPago o verifica más tarde.'
+      : status === 'CANCELLED'
+      ? 'El pago fue cancelado. Puedes iniciar nuevamente cuando quieras.'
       : undefined;
 
     return res.json({ external_reference: orderId, status, payment, merchantOrders, dbUpdated, dbError, user_message });
   } catch (err) {
     console.error('[MP status] ', err);
     return res.status(500).json({ message: 'Error consultando estado', error: String(err) });
+  }
+});
+
+// POST /api/payments/timeout-cancel/:orderId
+// Cancela la orden si tras 5 minutos no tiene pago aprobado
+router.post('/timeout-cancel/:orderId', async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    if (!orderId) return res.status(400).json({ message: 'orderId es requerido' });
+    const result = await checkAndCancelIfUnpaid(orderId);
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ message: 'Error al cancelar por timeout', error: String(err) });
   }
 });
 
