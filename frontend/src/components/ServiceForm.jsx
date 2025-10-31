@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useRef } from "react";
-import { api } from "../lib/api";
+import { api, assetUrl } from "../lib/api";
 import { Input, Select, Textarea, Button } from "./FormComponents";
 import { useAuth } from "../auth/AuthProvider";
 
 export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 	const [title, setTitle] = useState(initial?.title || "");
 	const [description, setDescription] = useState(initial?.description || "");
-	const [category, setCategory] = useState(initial?.price ?? "");
+	// Fix: categoría no se seteaba cuando no se movía el select
+	const [category, setCategory] = useState(initial?.category ?? "");
 	const [price, setPrice] = useState(initial?.price ?? "");
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState(null);
 	const [errors, setErrors] = useState([]);
 	const [imageFile, setImageFile] = useState(null);
+	const [previewUrl, setPreviewUrl] = useState(initial?.image_url || initial?.imageUrl || null);
 	const firstInput = useRef(null);
 	const {user} = useAuth();
 
@@ -21,6 +23,8 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 		setDescription(initial?.description || "");
 		setCategory(initial?.category ?? "");
 		setPrice(initial?.price ?? "");
+		setPreviewUrl(initial?.image_url || initial?.imageUrl || null);
+		setImageFile(null);
 	}, [initial]);
 
 	useEffect(() => {
@@ -34,6 +38,7 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 
 		// validaciones simples
 		if (!title.trim()) return setError("El título es obligatorio");
+		if (!category) return setError("Seleccione una categoría");
 		if (!price || Number.isNaN(Number(price))) return setError("Precio inválido");
 
 		setLoading(true);
@@ -56,21 +61,27 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 			}
 
 			// Si hay imagen, subirla en segundo paso
+			let serviceObj = saved?.service ?? saved;
 			if (imageFile) {
 				const serviceId = saved?.service?.id || initial?.id;
 				if (serviceId) {
 					const formData = new FormData();
 					formData.append('image', imageFile);
 					try {
-						await api(`/services/${serviceId}/image`, { method: 'POST', body: formData });
+						const up = await api(`/services/${serviceId}/image`, { method: 'POST', body: formData });
+						// actualizar preview y objeto guardado con el path del backend
+						if (up?.imageUrl) {
+							setPreviewUrl(up.imageUrl);
+							serviceObj = { ...(serviceObj || {}), image_url: up.imageUrl };
+						}
 					} catch (uploadErr) {
 						console.warn('Error subiendo imagen, se guarda el servicio sin imagen:', uploadErr);
 					}
 				}
 			}
 
-			// onSaved puede recibir el servicio creado/actualizado
-			if (onSaved) onSaved(saved.service ?? saved);
+			// onSaved recibe el servicio creado/actualizado (incluida image_url si aplicó)
+			if (onSaved) onSaved(serviceObj);
 		} catch (err) {
 			console.error("ServiceForm error:", err);
 			setError(err.message || "Error guardando servicio");
@@ -78,6 +89,27 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 		} finally {
 			setLoading(false);
 		}
+	}
+
+	function onFileChange(file) {
+		if (!file) {
+			setImageFile(null);
+			setPreviewUrl(initial?.image_url || null);
+			return;
+		}
+		const valid = /image\/(jpeg|jpg|png|webp)/.test(file.type);
+		if (!valid) {
+			setError('Formato no soportado. Usa JPG, PNG o WEBP.');
+			return;
+		}
+		if (file.size > 5 * 1024 * 1024) {
+			setError('La imagen debe ser menor a 5MB.');
+			return;
+		}
+		setError(null);
+		setImageFile(file);
+		const url = URL.createObjectURL(file);
+		setPreviewUrl(url);
 	}
 
 	return (
@@ -111,6 +143,7 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 					value={category}
 					onChange={setCategory}
 					options={[
+						{ label: "-- Seleccione --", value: "" },
 						{ label: "Paseo", value: "PASEO" },
 						{ label: "Veterinaria", value: "VETERINARIA" },
 						{ label: "Entrenamiento", value: "ENTRENAMIENTO" },
@@ -128,7 +161,35 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 
 			<div>
 				<label className="block text-sm font-medium">Imagen (opcional)</label>
-				<input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] || null)} className="mt-1 block text-sm" />
+				<div
+					className="mt-1 flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300/80 bg-slate-50 p-4 text-center"
+					onDragOver={(e) => e.preventDefault()}
+					onDrop={(e) => {
+						e.preventDefault();
+						const f = e.dataTransfer.files?.[0];
+						onFileChange(f);
+					}}
+				>
+					<input
+						type="file"
+						accept="image/*"
+						onChange={(e) => onFileChange(e.target.files?.[0] || null)}
+						className="hidden"
+						id="service-image-input"
+					/>
+					<label htmlFor="service-image-input" className="text-sm text-slate-600">
+						Haz clic o arrastra una imagen aquí
+					</label>
+					{previewUrl && (
+						<div className="mt-3 w-full">
+							<img src={assetUrl(previewUrl)} alt="Previsualización" className="mx-auto h-40 w-auto rounded object-cover" />
+							<div className="mt-2 flex items-center justify-center gap-3 text-xs text-slate-600">
+								{imageFile && <span>{imageFile.name} · {((imageFile.size || 0) / 1024 / 1024).toFixed(1)} MB</span>}
+								<button type="button" className="underline" onClick={() => { setImageFile(null); setPreviewUrl(initial?.image_url || initial?.imageUrl || null); }}>Quitar imagen</button>
+							</div>
+						</div>
+					)}
+				</div>
 			</div>
 
 			<div className="flex items-center justify-end gap-2">

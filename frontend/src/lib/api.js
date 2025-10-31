@@ -1,5 +1,17 @@
 // src/lib/api.js
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000/api";
+export const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000/api";
+
+// Devuelve URL absoluta para assets servidos por el backend (ej. /uploads/..)
+export function assetUrl(p) {
+  if (!p) return '';
+  if (typeof p !== 'string') return '';
+  // URLs locales de previsualización o data URIs deben pasar tal cual
+  if (/^(blob:|data:)/i.test(p)) return p;
+  if (/^https?:\/\//i.test(p)) return p;
+  // quitar sufijo /api del API_BASE para apuntar al origen del backend
+  const origin = API_BASE.replace(/\/?api\/?$/i, '');
+  return `${origin}${p.startsWith('/') ? p : `/${p}`}`;
+}
 
 export async function api(path, { method = "GET", body, token } = {}) {
   const t = token || localStorage.getItem("token") || "";

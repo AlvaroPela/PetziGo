@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { api } from "../../lib/api";
+import React, { useEffect, useMemo, useState } from "react";
+import { api, assetUrl } from "../../lib/api";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import Modal from "../../components/Modal";
 import ServiceForm from "../../components/ServiceForm";
@@ -26,6 +26,13 @@ const RATING_OPTIONS = [
 ];
 
 
+const SORT_OPTIONS = [
+		{ label: "Relevancia", value: "relevance" },
+		{ label: "Precio: menor a mayor", value: "price_asc" },
+		{ label: "Precio: mayor a menor", value: "price_desc" },
+		{ label: "Rating", value: "rating_desc" },
+	];
+
 const ServicesPage = () => {
 	const [services, setServices] = useState([]);
 	const [loading, setLoading] = useState(true);
@@ -46,6 +53,9 @@ const ServicesPage = () => {
 	const [rating, setRating] = useState("");
 	const [search, setSearch] = useState("");
 	const [providerId, setProviderId] = useState("");
+	const [sortBy, setSortBy] = useState("relevance");
+	const [page, setPage] = useState(1);
+	const pageSize = 12;
 
 	// errores locales de validación de filtros
 	const [filterError, setFilterError] = useState(null);
@@ -57,7 +67,6 @@ const ServicesPage = () => {
 			setLoading(true);
 			setError(null);
 			try {
-				debugger;
 				const res = await api("/services"); // sin queries -> devuelve todo
 				if (!mounted) return;
 				setServices(Array.isArray(res.services) ? res.services : res.services || []);
@@ -112,7 +121,8 @@ const ServicesPage = () => {
 		try {
 			const res = await api(path);
 			setServices(Array.isArray(res.services) ? res.services : res.services || []);
-		} catch (err) {
+				setPage(1);
+			} catch (err) {
 			console.error("ServicesPage loadWithFilters error:", err);
 			setError(err.message || "Error cargando servicios");
 		} finally {
@@ -206,10 +216,61 @@ const ServicesPage = () => {
 		}
 	}
 
+	function formatCurrency(value) {
+		try {
+			return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(Number(value || 0));
+		} catch {
+			return `$ ${value}`;
+		}
+	}
+
+	function RatingStars({ value = 0 }) {
+		const v = Math.max(0, Math.min(5, Number(value || 0)));
+		const full = Math.floor(v);
+		const half = v - full >= 0.5;
+		const empty = 5 - full - (half ? 1 : 0);
+		return (
+			<div className="flex items-center gap-0.5" aria-label={`Rating ${v}`}>
+				{Array.from({ length: full }).map((_, i) => (
+					<span key={`f-${i}`} className="text-amber-500">★</span>
+				))}
+				{half && <span className="text-amber-500">☆</span>}
+				{Array.from({ length: empty }).map((_, i) => (
+					<span key={`e-${i}`} className="text-gray-300">★</span>
+				))}
+				<span className="ml-1 text-xs text-gray-500">{v.toFixed(1)}</span>
+			</div>
+		);
+	}
+
+	const sortedServices = useMemo(() => {
+		const list = Array.isArray(services) ? [...services] : [];
+		switch (sortBy) {
+			case 'price_asc':
+				return list.sort((a, b) => (a.price || 0) - (b.price || 0));
+			case 'price_desc':
+				return list.sort((a, b) => (b.price || 0) - (a.price || 0));
+			case 'rating_desc':
+				return list.sort((a, b) => (b.average_rating || 0) - (a.average_rating || 0));
+			default:
+				return list; // relevancia (orden original del backend)
+		}
+	}, [services, sortBy]);
+
+	const totalPages = Math.max(1, Math.ceil(sortedServices.length / pageSize));
+	const pageClamped = Math.min(page, totalPages);
+	const visible = useMemo(() => {
+		const start = (pageClamped - 1) * pageSize;
+		return sortedServices.slice(start, start + pageSize);
+	}, [sortedServices, pageClamped]);
+
 	return (
 		<div className="container mx-auto p-4">
 			<div className="flex items-center justify-between mb-4">
-				<h1 className="text-2xl font-bold">Servicios</h1>
+				<div>
+					<h1 className="text-2xl font-bold">Servicios</h1>
+					<p className="text-sm text-gray-500">Explora y filtra servicios de proveedores verificados.</p>
+				</div>
 				<div className="flex items-center gap-2">
 					{(auth.user && auth.user.role === 'PROVIDER') && (
 						<Button onClick={openCreate}>
@@ -221,7 +282,13 @@ const ServicesPage = () => {
 
 			{/* --- Panel de filtros --- */}
 			<div className="mb-4 p-4 border rounded-2xl bg-white">
-				<h2 className="font-semibold mb-2">Filtros</h2>
+				<div className="flex items-center justify-between mb-2">
+					<h2 className="font-semibold">Filtros</h2>
+					<div className="flex items-center gap-2">
+						<span className="text-sm text-gray-500 hidden md:inline">{sortedServices.length} resultados</span>
+						<Select label="Ordenar" value={sortBy} onChange={(v) => { setSortBy(v); setPage(1); }} options={SORT_OPTIONS} />
+					</div>
+				</div>
 				<div className="grid grid-cols-1 md:grid-cols-3 gap-3">
 					<div>
 						<Select label="Categoría" value={category} onChange={setCategory} options={CATEGORY_OPTIONS} />
@@ -258,21 +325,49 @@ const ServicesPage = () => {
 				{filterError && <p className="text-red-600 mt-2">{filterError}</p>}
 
 				<div className="mt-3 flex items-center gap-2">
-					<Button onClick={loadWithFilters} disabled={loading}>Aplicar filtros</Button>
-					<Button onClick={resetFilters} variant="outline" disabled={loading}>Resetear</Button>
+					<Button onClick={() => { setPage(1); loadWithFilters(); }} disabled={loading}>Aplicar filtros</Button>
+					<Button onClick={() => { resetFilters(); setSortBy('relevance'); setPage(1); }} variant="outline" disabled={loading}>Resetear</Button>
 				</div>
 			</div>
 
-			{loading && <p>Cargando...</p>}
+			{loading && (
+				<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+					{Array.from({ length: 6 }).map((_, i) => (
+						<div key={i} className="rounded-lg border p-4 bg-white animate-pulse">
+							<div className="h-4 bg-gray-200 rounded w-1/2 mb-2" />
+							<div className="h-3 bg-gray-100 rounded w-3/4 mb-4" />
+							<div className="h-40 bg-gray-100 rounded mb-4" />
+							<div className="h-4 bg-gray-200 rounded w-1/3" />
+						</div>
+					))}
+				</div>
+			)}
 			{error && <p className="text-red-600">{error}</p>}
 
 			<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-				{services.map((s) => (
+				{visible.map((s) => (
 					<div key={s.id} className="rounded-lg border p-4 bg-white">
-						<h3 className="font-semibold">{s.title}</h3>
-						<p className="text-sm text-gray-600">{s.description}</p>
-						<p className="text-sm text-gray-500">Categoria: {s.category}</p>
-						<span className="text-sm font-medium text-petzi">$ {s.price}</span>
+						<div className="flex items-start justify-between">
+							<h3 className="font-semibold text-lg line-clamp-1">{s.title}</h3>
+							<span className="ml-2 inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 ring-1 ring-inset ring-violet-200">{s.category}</span>
+						</div>
+						<div className="mt-2 h-36 w-full overflow-hidden rounded bg-slate-50 flex items-center justify-center">
+							{s.image_url ? (
+								<img src={assetUrl(s.image_url)} alt={s.title} className="h-full w-full object-cover" />
+							) : (
+								<div className="text-xs text-slate-500">Sin imagen</div>
+							)}
+						</div>
+						<p className="mt-2 text-sm text-gray-600 line-clamp-2">{s.description}</p>
+						<div className="mt-3 flex items-center justify-between">
+							<div className="text-sm text-gray-500">
+								<div className="font-medium text-gray-700">{s.provider_name}</div>
+								<RatingStars value={s.average_rating} />
+							</div>
+							<div className="text-right">
+								<div className="text-lg font-semibold text-petzi">{formatCurrency(s.price)}</div>
+							</div>
+						</div>
 						<div className="mt-3 flex items-center justify-between">
 							<div className="flex items-center gap-2">
 								<Link to={`/services/${s.id}`} className="inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-violet-800 ring-1 ring-violet-200 hover:bg-violet-50 text-sm">Ver</Link>
@@ -286,8 +381,17 @@ const ServicesPage = () => {
 						</div>
 					</div>
 				))}
-				{services.length === 0 && !loading && <p>No se encontraron servicios</p>}
+				{sortedServices.length === 0 && !loading && <p>No se encontraron servicios</p>}
 			</div>
+
+			{/* Paginación */}
+			{sortedServices.length > pageSize && (
+				<div className="mt-6 flex items-center justify-center gap-2">
+					<Button variant="outline" disabled={pageClamped <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Anterior</Button>
+					<span className="text-sm text-gray-600">Página {pageClamped} de {totalPages}</span>
+					<Button variant="outline" disabled={pageClamped >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Siguiente</Button>
+				</div>
+			)}
 
 			<Modal
 				isOpen={open}
