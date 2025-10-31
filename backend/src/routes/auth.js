@@ -14,6 +14,14 @@ const registerValidation = [
   body('password')
     .isLength({ min: 6 })
     .withMessage('La contraseña debe tener al menos 6 caracteres'),
+  body('confirmPassword')
+    .optional()
+    .custom((value, { req }) => {
+      if (req.body.role === 'PROVIDER' || typeof value !== 'undefined') {
+        if (value !== req.body.password) throw new Error('Las contraseñas no coinciden');
+      }
+      return true;
+    }),
   body('role')
     .isIn(['CLIENT', 'PROVIDER'])
     .withMessage('Rol inválido'),
@@ -21,6 +29,9 @@ const registerValidation = [
     .optional()
     .matches(/^\+?[1-9]\d{1,14}$/)
     .withMessage('Teléfono inválido'),
+  // Si es proveedor, exigir ubicación base
+  body('location_lat').if(body('role').equals('PROVIDER')).isFloat({ min: -90, max: 90 }).withMessage('Latitud inválida'),
+  body('location_lng').if(body('role').equals('PROVIDER')).isFloat({ min: -180, max: 180 }).withMessage('Longitud inválida'),
 ];
 
 // Registro de usuarios
@@ -31,7 +42,7 @@ router.post('/register', registerValidation, async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, email, password, role, phone, address } = req.body;
+  const { name, email, password, role, phone, address, location_lat, location_lng } = req.body;
 
     // Verificar email único
     const [existingUsers] = await pool.query(
@@ -61,8 +72,8 @@ router.post('/register', registerValidation, async (req, res) => {
       // Si es proveedor, crear perfil
       if (role === 'PROVIDER') {
         await connection.query(
-          'INSERT INTO provider_profiles (user_id) VALUES (?)',
-          [userResult.insertId]
+          'INSERT INTO provider_profiles (user_id, location_lat, location_lng) VALUES (?, ?, ?)',
+          [userResult.insertId, location_lat, location_lng]
         );
       }
 

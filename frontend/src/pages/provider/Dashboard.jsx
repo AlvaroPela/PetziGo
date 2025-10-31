@@ -4,7 +4,7 @@ import { api } from '../../lib/api';
 
 const fmtMoney = (n) => {
   const num = Number(n || 0);
-  try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(num); } catch {
+  try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'COP', maximumFractionDigits: 2 }).format(num); } catch {
     return `$${num.toFixed(2)}`;
   }
 };
@@ -16,6 +16,7 @@ const ProviderDashboard = () => {
   const [certs, setCerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Sin seguimiento: se elimina tracking manual por orden
 
   useEffect(() => {
     let mounted = true;
@@ -93,7 +94,8 @@ const ProviderDashboard = () => {
   // Secciones adicionales de servicios aceptados y rechazados
   const serviceAccepted = useMemo(() => {
     const up = (s) => (s||'').toUpperCase();
-    return orders.filter(o => up(o.itemType) === 'SERVICE' && up(o.status) === 'ACCEPTED');
+    // Incluir también COMPLETED para que no desaparezcan al finalizar
+    return orders.filter(o => up(o.itemType) === 'SERVICE' && ['ACCEPTED','IN_PROGRESS','COMPLETED'].includes(up(o.status)));
   }, [orders]);
   const serviceRejected = useMemo(() => {
     const up = (s) => (s||'').toUpperCase();
@@ -108,6 +110,8 @@ const ProviderDashboard = () => {
       alert(err?.message || 'No se pudo actualizar el estado');
     }
   };
+
+  // Se elimina envío de GPS manual desde este panel
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -268,6 +272,7 @@ const ProviderDashboard = () => {
                   <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Servicio</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Fecha</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Estado</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Acción</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -276,11 +281,23 @@ const ProviderDashboard = () => {
                     <td className="px-3 py-2 text-sm text-slate-700">{o.buyerName || 'Cliente'}</td>
                     <td className="px-3 py-2 text-sm text-slate-700">{o.serviceTitle || 'Servicio'}</td>
                     <td className="px-3 py-2 text-sm text-slate-600">{(o.serviceDate ? new Date(o.serviceDate).toLocaleString() : (o.requestedAt ? new Date(o.requestedAt).toLocaleString() : '—'))}</td>
-                    <td className="px-3 py-2 text-[11px] text-emerald-700">ACCEPTED</td>
+                    <td className="px-3 py-2 text-[11px] text-emerald-700">{(o.status||'').toUpperCase()}</td>
+                    <td className="px-3 py-2 text-right">
+                      {((o.status||'').toUpperCase() === 'COMPLETED') ? (
+                        <span className="inline-block text-xs px-2 py-1 rounded bg-emerald-50 text-emerald-700">Completado</span>
+                      ) : (
+                        <button
+                          onClick={() => patchOrderStatus(o.id, 'COMPLETED')}
+                          className="text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                        >
+                          Finalizar servicio
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {serviceAccepted.length === 0 && (
-                  <tr><td colSpan={4} className="px-3 py-6 text-center text-sm text-slate-500">No hay servicios aceptados</td></tr>
+                  <tr><td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-500">No hay servicios aceptados</td></tr>
                 )}
               </tbody>
             </table>

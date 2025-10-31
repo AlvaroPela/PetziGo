@@ -206,6 +206,14 @@ router.post('/', requireAuth, requireRole(['PROVIDER']), requireVerifiedProvider
 
     const { title, description, price, category } = req.body;
 
+    // Si es un servicio de paseo (PASEO), exigir ubicación base del proveedor
+    if (category === 'PASEO') {
+      const [[pp]] = await pool.query('SELECT location_lat, location_lng FROM provider_profiles WHERE user_id = ?', [req.user.id]);
+      if (!pp || pp.location_lat == null || pp.location_lng == null) {
+        return res.status(400).json({ message: 'Debes registrar tu ubicación en tu perfil para poder crear servicios de paseo.' });
+      }
+    }
+
     const [result] = await pool.query(
       `INSERT INTO services (provider_id, title, description, price, category)
        VALUES (?, ?, ?, ?, ?)`,

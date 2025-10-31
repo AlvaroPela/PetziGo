@@ -350,3 +350,62 @@ router.patch('/admin/certifications/:id', requireAuth, requireRole(['ADMIN']), [
 });
 
 export default router;
+
+// Actualizar ubicación en vivo del proveedor (heartbeat cada 10s)
+router.post('/me/location', requireAuth, requireRole(['PROVIDER']), [
+  body('latitude').isFloat({ min: -90, max: 90 }),
+  body('longitude').isFloat({ min: -180, max: 180 })
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { latitude, longitude, providerId: providerIdFromBody } = req.body;
+    const providerId = Number(providerIdFromBody || req.user.id);
+    if (!providerId || providerId !== req.user.id) {
+      return res.status(403).json({ message: 'providerId inválido' });
+    }
+
+    // Validar si existe registro para este proveedor y luego crear o actualizar
+    const [[exists]] = await pool.query(
+      `SELECT id FROM gps_locations WHERE provider_id = ? LIMIT 1`,
+      [providerId]
+    );
+
+    if (exists) {
+      await pool.query(
+        `UPDATE gps_locations
+         SET latitude = ?, longitude = ?, timestamp = NOW()
+         WHERE provider_id = ?`,
+        [latitude, longitude, providerId]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO gps_locations (provider_id, latitude, longitude, timestamp)
+         VALUES (?, ?, ?, NOW())`,
+        [providerId, latitude, longitude]
+      );
+    }
+    return res.json({ ok: true, providerId });
+  } catch (err) {
+    console.error('Error en /providers/me/location', err);
+    res.status(500).json({ message: 'Error registrando ubicación' });
+  }
+});
+
+// Obtener ubicación en vivo del proveedor por id
+router.get('/:id/location', async (req, res) => {
+  try {
+    const providerId = req.params.id;
+    const [[row]] = await pool.query(
+      `SELECT latitude, longitude, timestamp AS at FROM gps_locations WHERE provider_id = ?`,
+      [providerId]
+    );
+    if (!row) return res.json({ location: null });
+    res.json({ location: { latitude: Number(row.latitude), longitude: Number(row.longitude), at: row.at } });
+  } catch (err) {
+    console.error('Error al obtener ubicación del proveedor:', err);
+    res.status(500).json({ message: 'Error al obtener ubicación' });
+  }
+});

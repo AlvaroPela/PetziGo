@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
+import Modal from '../../components/Modal';
+import { MapContainer, TileLayer, Marker } from 'react-leaflet';
 
 const statusBadge = (status) => {
   const s = (status || '').toUpperCase();
@@ -39,6 +41,7 @@ const ClientDashboard = () => {
   const [pets, setPets] = useState([]);
   const [services, setServices] = useState([]);
   const [products, setProducts] = useState([]);
+  const [gpsModal, setGpsModal] = useState({ open: false, orderId: null, points: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -163,6 +166,24 @@ const ClientDashboard = () => {
                       {o.totalAmount != null && (
                         <div className="text-xs text-slate-600">Total: ${Number(o.totalAmount).toFixed(2)}</div>
                       )}
+                      <div className="mt-2">
+                        {((o.serviceCategory || '').toUpperCase() === 'PASEO') ? (
+                          <Link to={`/client/walk/${o.id}`} className="text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100">Ver ubicación en vivo</Link>
+                        ) : (
+                          <button
+                            className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700 hover:bg-slate-200"
+                            onClick={async () => {
+                              try {
+                                const data = await api(`/orders/${o.id}/gps`);
+                                const pts = Array.isArray(data?.points) ? data.points : [];
+                                setGpsModal({ open: true, orderId: o.id, points: pts });
+                              } catch (err) {
+                                alert(err?.message || 'No se pudo cargar la ubicación');
+                              }
+                            }}
+                          >Ver ubicación</button>
+                        )}
+                      </div>
                     </div>
                     <div className="text-right">
                         <div className={`inline-block px-3 py-0.5 rounded-full text-xs ${statusBadge(o.status)}`}>
@@ -176,10 +197,6 @@ const ClientDashboard = () => {
                             ? <div className="text-xs text-slate-500 mt-1">Pago: Confirmado</div>
                             : <div className="text-xs text-slate-500 mt-1">Pago: {o.paymentStatus}</div>
                         )}
-                      {o.paymentStatus && (
-                        /* Mostrar estado de pago de forma menos prominente */
-                        <div className="text-xs text-slate-500 mt-1">Pago: {o.paymentStatus}</div>
-                      )}
                     </div>
                     </div>
                   );
@@ -219,6 +236,11 @@ const ClientDashboard = () => {
                             : o.status}
                         </div>
                         <div className="text-xs text-slate-400 mt-2">Actualizado: {o.updatedAt ? formatDate(o.updatedAt) : '—'}</div>
+                        {(o.paymentStatus) && (
+                          (o.paymentStatus || '').toUpperCase() === 'COMPLETED'
+                            ? <div className="text-xs text-slate-500 mt-1">Pago: Confirmado</div>
+                            : <div className="text-xs text-slate-500 mt-1">Pago: {o.paymentStatus}</div>
+                        )}
                       </div>
                     </div>
                   );
@@ -239,6 +261,24 @@ const ClientDashboard = () => {
             </section>
           </aside>
         </div>
+        {/* Modal de ubicación para servicios */}
+        <Modal isOpen={gpsModal.open} onClose={() => setGpsModal({ open: false, orderId: null, points: [] })} ariaLabel="Ubicación del servicio">
+          <h3 className="text-base font-semibold mb-2">Ubicación del servicio</h3>
+          {gpsModal.points.length > 0 ? (
+            <div className="rounded overflow-hidden" style={{ height: 320 }}>
+              <MapContainer center={[gpsModal.points[0].latitude, gpsModal.points[0].longitude]} zoom={15} style={{ height: '100%', width: '100%' }}>
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                <Marker position={[gpsModal.points[0].latitude, gpsModal.points[0].longitude]} />
+              </MapContainer>
+              <div className="mt-2 text-xs text-slate-600">Última actualización: {formatDate(gpsModal.points[0].at)}</div>
+            </div>
+          ) : (
+            <div className="text-sm text-slate-600">No hay ubicaciones registradas aún para este servicio.</div>
+          )}
+        </Modal>
       </div>
     </div>
   );

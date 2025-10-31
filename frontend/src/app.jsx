@@ -23,6 +23,7 @@ import RegisterPage from "./pages/auth/Register";
 import ClientDashboard from "./pages/client/Dashboard";
 import PetManagement from "./pages/client/PetManagement";
 import RequireRole from "./auth/RequireRole";
+import WalkTracker from "./pages/client/WalkTracker";
 
 // Provider Pages
 import ProviderDashboard from "./pages/provider/Dashboard";
@@ -73,6 +74,7 @@ export function App() {
 					<Route path="client" element={<RequireRole allowedRoles={["CLIENT"]} />}>
 						<Route index element={<ClientDashboard />} />
 						<Route path="pets" element={<PetManagement />} />
+            <Route path="walk/:orderId" element={<WalkTracker />} />
 					</Route>
 
 					{/* Protected Provider Routes */}

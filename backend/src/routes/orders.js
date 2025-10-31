@@ -142,6 +142,7 @@ function ordersBaseQuery(extraFilter = '') {
                  o.payment_status AS paymentStatus,
                  o.mercadopago_preference_id AS mpPreferenceId,
                  o.mercadopago_payment_id AS mpPaymentId,
+                 o.provider_id AS providerId,
                  u.name AS buyerName,
                  u.email AS buyerEmail,
                  p.id AS productId,
@@ -149,9 +150,12 @@ function ordersBaseQuery(extraFilter = '') {
                  p.price AS productPrice,
                  s.id AS serviceId,
                  s.title AS serviceTitle,
+                 s.category AS serviceCategory,
                  s.price AS servicePrice,
                  prov.name AS providerName,
                  pp.business_description AS providerDescription,
+                 pp.location_lat AS providerBaseLat,
+                 pp.location_lng AS providerBaseLng,
                  pet.id AS petId,
                  pet.name AS petName
           FROM orders o
@@ -198,6 +202,26 @@ router.get('/', authRequired(['ADMIN', 'CLIENT']), filterValidations, async (req
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
   const [rows] = await pool.query(`${ordersBaseQuery(where)} ORDER BY o.created_at DESC`, values);
   res.json(rows);
+});
+
+// Obtener una orden por id (enriquecida)
+router.get('/:id', authRequired(['CLIENT', 'PROVIDER', 'ADMIN']), [param('id').isInt({ min: 1 })], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  const { id } = req.params;
+  // Restringir acceso: cliente dueño o proveedor dueño, o admin
+  if (req.user.role !== 'ADMIN') {
+    const [[own]] = await pool.query('SELECT user_id, provider_id FROM orders WHERE id = ?', [id]);
+    if (!own) return res.status(404).json({ message: 'Orden no encontrada' });
+    if (own.user_id !== req.user.id && own.provider_id !== req.user.id) {
+      return res.status(403).json({ message: 'No autorizado' });
+    }
+  }
+  const [rows] = await pool.query(`${ordersBaseQuery('WHERE o.id = ?')} LIMIT 1`, [id]);
+  if (!rows || rows.length === 0) return res.status(404).json({ message: 'Orden no encontrada' });
+  res.json(rows[0]);
 });
 
 router.patch('/:id/status', authRequired(['PROVIDER', 'ADMIN']), [
@@ -255,6 +279,112 @@ router.get('/:id/history', authRequired(['PROVIDER', 'ADMIN']), [param('id').isI
     [id]
   );
   res.json(rows);
+});
+
+// Registrar posición GPS del proveedor para una orden de servicio (paseo)
+router.post('/:id/gps', authRequired(['PROVIDER']), [
+  param('id').isInt({ min: 1 }),
+  body('latitude').isFloat({ min: -90, max: 90 }),
+  body('longitude').isFloat({ min: -180, max: 180 })
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  const { id } = req.params;
+  const { latitude, longitude } = req.body;
+
+  // Validar que la orden sea del proveedor y de tipo servicio
+  const [[order]] = await pool.query(
+    `SELECT o.id, o.provider_id, o.item_type, o.service_id, s.category
+     FROM orders o
+     LEFT JOIN services s ON s.id = o.service_id
+     WHERE o.id = ?`, [id]
+  );
+  if (!order) return res.status(404).json({ message: 'Orden no encontrada' });
+  if (order.provider_id !== req.user.id) return res.status(403).json({ message: 'No autorizado' });
+  if ((order.item_type || '').toUpperCase() !== 'SERVICE') return res.status(400).json({ message: 'La orden no es de servicio' });
+  // Opcional: exigir que sea PASEO
+  // if ((order.category || '').toUpperCase() !== 'PASEO') return res.status(400).json({ message: 'Solo se admite tracking para servicios de paseo' });
+
+  await pool.query(
+    'INSERT INTO gps_locations (order_id, latitude, longitude) VALUES (?, ?, ?)',
+    [id, latitude, longitude]
+  );
+  res.status(201).json({ ok: true });
+});
+
+// Obtener últimas posiciones GPS de una orden para cliente o proveedor
+router.get('/:id/gps', authRequired(['CLIENT', 'PROVIDER', 'ADMIN']), [param('id').isInt({ min: 1 })], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  const { id } = req.params;
+  const role = req.user.role;
+  const providerIdQ = req.query.providerId ? Number(req.query.providerId) : null;
+
+  if (role !== 'ADMIN') {
+    const [[order]] = await pool.query('SELECT user_id, provider_id FROM orders WHERE id = ?', [id]);
+    if (!order) return res.status(404).json({ message: 'Orden no encontrada' });
+    const isOwner = order.user_id === req.user.id;
+    const isProvider = order.provider_id === req.user.id;
+    if (!isOwner && !isProvider) return res.status(403).json({ message: 'No autorizado' });
+  }
+
+  // Si viene providerId, responder SOLO desde gps_locations filtrando por provider_id (sin joins),
+  // cumpliendo la autorización del pedido previa
+  if (providerIdQ && Number.isFinite(providerIdQ) && providerIdQ > 0) {
+    const [rows] = await pool.query(
+      `SELECT latitude, longitude, \`timestamp\` AS at
+       FROM gps_locations WHERE provider_id = ?
+       ORDER BY \`timestamp\` ASC LIMIT 1000`,
+      [providerIdQ]
+    );
+    return res.json({ points: rows.map(r => ({
+      latitude: Number(r.latitude),
+      longitude: Number(r.longitude),
+      at: r.at
+    })) });
+  }
+
+  // Determinar si es servicio PASEO o no, y devolver fallback a base para no-PASEO
+  const [[svcInfo]] = await pool.query(
+    `SELECT o.item_type AS itemType, s.category AS serviceCategory, pp.location_lat AS baseLat, pp.location_lng AS baseLng
+     FROM orders o
+     LEFT JOIN services s ON s.id = o.service_id
+     LEFT JOIN provider_profiles pp ON pp.user_id = o.provider_id
+     WHERE o.id = ?`, [id]
+  );
+
+  const up = (x) => (x || '').toUpperCase();
+  const isService = up(svcInfo?.itemType) === 'SERVICE';
+  const isPaseo = up(svcInfo?.serviceCategory) === 'PASEO';
+
+  if (isService && !isPaseo) {
+    // No es paseo: intentar ubicación en vivo del proveedor; si no existe, fallback a base
+    const [[live]] = await pool.query(
+      `SELECT latitude, longitude, timestamp AS at FROM gps_locations WHERE provider_id = (
+         SELECT provider_id FROM orders WHERE id = ?
+       )`, [id]
+    );
+    if (live) {
+      return res.json({ points: [{ latitude: Number(live.latitude), longitude: Number(live.longitude), at: live.at }] });
+    }
+    if (svcInfo?.baseLat != null && svcInfo?.baseLng != null) {
+      return res.json({ points: [{ latitude: Number(svcInfo.baseLat), longitude: Number(svcInfo.baseLng), at: null }] });
+    }
+    return res.json({ points: [] });
+  }
+
+  // Paseo: devolver puntos GPS reales por orden en orden cronológico ascendente
+  const [rows] = await pool.query(
+    `SELECT latitude, longitude, \`timestamp\` AS at
+     FROM gps_locations WHERE order_id = ?
+     ORDER BY \`timestamp\` ASC LIMIT 1000`,
+    [id]
+  );
+  res.json({ points: rows });
 });
 
 export default router;

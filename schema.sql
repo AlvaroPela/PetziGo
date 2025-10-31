@@ -40,6 +40,9 @@ CREATE TABLE IF NOT EXISTS provider_profiles (
   location_lng DECIMAL(11, 8),
   average_rating DECIMAL(3,2) DEFAULT 0,
   total_reviews INT DEFAULT 0,
+  current_lat DECIMAL(10,7) NULL,
+  current_lng DECIMAL(10,7) NULL,
+  current_at TIMESTAMP NULL DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id)
@@ -152,11 +155,14 @@ CREATE TABLE IF NOT EXISTS reviews (
 -- Tracking GPS
 CREATE TABLE IF NOT EXISTS gps_locations (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  order_id INT NOT NULL,
+  order_id INT,
+  provider_id INT NULL,
   latitude DECIMAL(10, 8) NOT NULL,
   longitude DECIMAL(11, 8) NOT NULL,
   timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (order_id) REFERENCES orders(id)
+  FOREIGN KEY (order_id) REFERENCES orders(id),
+  FOREIGN KEY (provider_id) REFERENCES provider_profiles(user_id),
+  UNIQUE KEY uniq_gps_provider (provider_id)
 );
 
 -- Índices para optimizar búsquedas

@@ -47,6 +47,69 @@ export function AuthProvider({ children }) {
     }
   }, [token, fetchMe]);
 
+  // Heartbeat de ubicación cada 10s para proveedores autenticados
+  // Opción de simulación (dev): mover ~5 metros por tick sin pedir geolocalización real
+  useEffect(() => {
+    if (!user || user.role !== 'PROVIDER') return;
+    let timerId;
+    let stopped = false;
+
+    // Toggle de simulación: define localStorage.setItem('simulateGps', '1') para activarla
+    const simulate = (
+      (typeof window !== 'undefined' && localStorage.getItem('simulateGps') === '1') ||
+      (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.DEV === true)
+    );
+    // Punto inicial para la simulación (Medellín aprox.)
+    let simLat = 6.1689793;
+    let simLng = -75.59018112;
+
+    const metersToLat = (m) => m / 111111; // ~ metros a grados lat
+    const metersToLng = (m, lat) => m / (111111 * Math.cos((lat || 0) * Math.PI / 180)); // ~ metros a grados lng
+
+    const sendSimulated = async () => {
+      // Caminata rápida: ~25 metros por tick (10s) ≈ ~9 km/h
+      const distanceM = 25;
+      const angle = Math.random() * 2 * Math.PI;
+      const dLat = metersToLat(distanceM * Math.cos(angle));
+      const dLng = metersToLng(distanceM * Math.sin(angle), simLat);
+      simLat += dLat;
+      simLng += dLng;
+      try {
+        await api('/providers/me/location', { method: 'POST', body: { latitude: simLat, longitude: simLng } });
+      } catch {}
+    };
+
+    const sendReal = () => new Promise((resolve) => {
+      if (!('geolocation' in navigator)) return resolve();
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          try {
+            const { latitude, longitude } = pos.coords || {};
+            if (typeof latitude === 'number' && typeof longitude === 'number') {
+              await api('/providers/me/location', { method: 'POST', body: { latitude, longitude } });
+            }
+          } catch {}
+          resolve();
+        },
+        () => resolve(),
+        { enableHighAccuracy: true, maximumAge: 10000, timeout: 10000 }
+      );
+    });
+
+    const loop = async () => {
+      if (stopped) return;
+      if (simulate) {
+        await sendSimulated();
+      } else {
+        await sendReal();
+      }
+      if (stopped) return;
+      timerId = setTimeout(loop, 10000); // 10s
+    };
+    loop();
+    return () => { stopped = true; if (timerId) clearTimeout(timerId); };
+  }, [user]);
+
   const login = useCallback(async (email, password) => {
     try {
       const data = await api("/auth/login", { method: "POST", body: { email, password } });
