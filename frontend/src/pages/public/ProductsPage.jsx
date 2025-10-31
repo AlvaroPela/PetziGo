@@ -41,6 +41,8 @@ export default function ProductsPage() {
   const [sortBy, setSortBy] = useState('relevance');
   const [page, setPage] = useState(1);
   const pageSize = 12;
+  // Modal imagen ampliada
+  const [imgModal, setImgModal] = useState({ open: false, src: null, alt: '' });
 
   const auth = useAuth();
   const navigate = useNavigate();
@@ -267,9 +269,20 @@ export default function ProductsPage() {
               <h3 className="font-semibold text-lg line-clamp-1">{p.name}</h3>
               <span className="ml-2 inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-200">{p.category}</span>
             </div>
-            <div className="mt-2 h-36 w-full overflow-hidden rounded bg-slate-50 flex items-center justify-center">
+            <div
+              className="mt-2 h-36 w-full overflow-hidden rounded bg-slate-50 flex items-center justify-center relative"
+              onClick={() => { if (p.image_url) setImgModal({ open: true, src: assetUrl(p.image_url), alt: p.name }); }}
+              role={p.image_url ? 'button' : undefined}
+              aria-label={p.image_url ? 'Abrir imagen' : undefined}
+              style={{ cursor: p.image_url ? 'zoom-in' : 'default' }}
+            >
               {p.image_url ? (
-                <img src={assetUrl(p.image_url)} alt={p.name} className="h-full w-full object-cover" />
+                <>
+                  <img src={assetUrl(p.image_url)} alt={p.name} className="h-full w-full object-cover" />
+                  <div className="absolute bottom-1 right-1 rounded bg-black/55 text-white text-[10px] px-1.5 py-0.5 pointer-events-none select-none">
+                    Haz clic para ampliar
+                  </div>
+                </>
               ) : (
                 <div className="text-xs text-slate-500">Sin imagen</div>
               )}
@@ -311,6 +324,17 @@ export default function ProductsPage() {
           <Button variant="outline" disabled={pageClamped >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Siguiente</Button>
         </div>
       )}
+
+      {/* Modal de imagen ampliada */}
+      <Modal isOpen={imgModal.open} onClose={() => setImgModal({ open: false, src: null, alt: '' })} ariaLabel="Imagen del producto">
+        <div className="max-w-3xl mx-auto">
+          {imgModal.src ? (
+            <img src={imgModal.src} alt={imgModal.alt} className="max-h-[80vh] w-auto mx-auto rounded" />
+          ) : (
+            <div className="text-slate-500 text-sm">Sin imagen</div>
+          )}
+        </div>
+      </Modal>
 
       <Modal isOpen={open} onClose={() => { setOpen(false); setEditing(null); }} ariaLabel="Formulario producto">
         <ProductForm initial={editing} onSaved={handleSaved} onCancel={() => { setOpen(false); setEditing(null); }} />

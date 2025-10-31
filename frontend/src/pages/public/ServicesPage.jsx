@@ -57,6 +57,9 @@ const ServicesPage = () => {
 	const [page, setPage] = useState(1);
 	const pageSize = 12;
 
+	// Modal imagen ampliada
+	const [imgModal, setImgModal] = useState({ open: false, src: null, alt: '' });
+
 	// errores locales de validación de filtros
 	const [filterError, setFilterError] = useState(null);
 
@@ -351,9 +354,20 @@ const ServicesPage = () => {
 							<h3 className="font-semibold text-lg line-clamp-1">{s.title}</h3>
 							<span className="ml-2 inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 ring-1 ring-inset ring-violet-200">{s.category}</span>
 						</div>
-						<div className="mt-2 h-36 w-full overflow-hidden rounded bg-slate-50 flex items-center justify-center">
+						<div
+							className="mt-2 h-36 w-full overflow-hidden rounded bg-slate-50 flex items-center justify-center relative"
+							onClick={() => { if (s.image_url) setImgModal({ open: true, src: assetUrl(s.image_url), alt: s.title }); }}
+							role={s.image_url ? 'button' : undefined}
+							aria-label={s.image_url ? 'Abrir imagen' : undefined}
+							style={{ cursor: s.image_url ? 'zoom-in' : 'default' }}
+						>
 							{s.image_url ? (
-								<img src={assetUrl(s.image_url)} alt={s.title} className="h-full w-full object-cover" />
+								<>
+									<img src={assetUrl(s.image_url)} alt={s.title} className="h-full w-full object-cover" />
+									<div className="absolute bottom-1 right-1 rounded bg-black/55 text-white text-[10px] px-1.5 py-0.5 pointer-events-none select-none">
+										Haz clic para ampliar
+									</div>
+								</>
 							) : (
 								<div className="text-xs text-slate-500">Sin imagen</div>
 							)}
@@ -392,6 +406,21 @@ const ServicesPage = () => {
 					<Button variant="outline" disabled={pageClamped >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Siguiente</Button>
 				</div>
 			)}
+
+			{/* Modal de imagen ampliada */}
+			<Modal
+				isOpen={imgModal.open}
+				onClose={() => setImgModal({ open: false, src: null, alt: '' })}
+				ariaLabel="Imagen del servicio"
+			>
+				<div className="max-w-3xl mx-auto">
+					{imgModal.src ? (
+						<img src={imgModal.src} alt={imgModal.alt} className="max-h-[80vh] w-auto mx-auto rounded" />
+					) : (
+						<div className="text-slate-500 text-sm">Sin imagen</div>
+					)}
+				</div>
+			</Modal>
 
 			<Modal
 				isOpen={open}
