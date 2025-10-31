@@ -80,13 +80,18 @@ router.get('/', [
     // `;
 
     let query = `
-      SELECT s.*, u.name as provider_name, 
+      SELECT s.*, 
+             u.name AS provider_name, 
+             u.email AS provider_email,
+             pp.verified AS provider_verified,
              pp.average_rating, pp.total_reviews,
              pp.location_lat, pp.location_lng
       FROM services s
       INNER JOIN users u ON s.provider_id = u.id
       INNER JOIN provider_profiles pp ON s.provider_id = pp.user_id
       WHERE s.active = 1
+        AND pp.location_lat IS NOT NULL
+        AND pp.location_lng IS NOT NULL
     `;
 
     const values = [];
