@@ -39,8 +39,11 @@ const PetRow = ({ pet }) => {
 
 const ClientDashboard = () => {
   const [pets, setPets] = useState([]);
-  const [services, setServices] = useState([]);
-  const [products, setProducts] = useState([]);
+  const [services, setServices] = useState([]); // listado completo
+  const [products, setProducts] = useState([]); // listado completo
+  const [selectedTab, setSelectedTab] = useState('services'); // 'services' | 'products' | 'pets'
+  const [svcLimit, setSvcLimit] = useState(5);
+  const [prodLimit, setProdLimit] = useState(5);
   const [gpsModal, setGpsModal] = useState({ open: false, orderId: null, points: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -71,8 +74,8 @@ const ClientDashboard = () => {
           const orders = Array.isArray(ordersRes) ? ordersRes : (ordersRes || []);
           const svc = orders.filter(o => (o.itemType === 'SERVICE' || o.itemType === 'service'));
           const prods = orders.filter(o => (o.itemType === 'PRODUCT' || o.itemType === 'product'));
-          setServices(svc.slice(0, 5));
-          setProducts(prods.slice(0, 5));
+          setServices(svc);
+          setProducts(prods);
         } else {
           const err = results[1].reason;
           console.warn('No se pudieron cargar órdenes:', err);
@@ -98,7 +101,7 @@ const ClientDashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-6">
-        <header className="mb-6 flex items-start justify-between">
+        <header className="mb-4 flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Mi panel</h1>
             <p className="text-sm text-gray-600">Resumen rápido de tus reservas y mascotas</p>
@@ -120,13 +123,28 @@ const ClientDashboard = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2">
-            <section className="mb-6">
-              <h2 className="text-lg font-semibold mb-3">Próximas reservas / Servicios</h2>
-              <div className="space-y-2.5">
-                {services.length === 0 && !loading && (
-                  <div className="bg-white rounded-lg p-3 text-sm text-slate-600">No tienes reservas activas</div>
-                )}
-                {services.map(o => {
+            {/* Tabs para reducir scroll */}
+            <div className="mb-3 flex flex-wrap gap-2">
+              <button onClick={() => setSelectedTab('services')} className={`px-3 py-1.5 rounded-full text-sm ${selectedTab==='services' ? 'bg-violet-600 text-white' : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'}`}>
+                Servicios <span className="ml-1 text-xs opacity-90">({services.length})</span>
+              </button>
+              <button onClick={() => setSelectedTab('products')} className={`px-3 py-1.5 rounded-full text-sm ${selectedTab==='products' ? 'bg-violet-600 text-white' : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'}`}>
+                Productos <span className="ml-1 text-xs opacity-90">({products.length})</span>
+              </button>
+              <button onClick={() => setSelectedTab('pets')} className={`px-3 py-1.5 rounded-full text-sm ${selectedTab==='pets' ? 'bg-violet-600 text-white' : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'}`}>
+                Mascotas <span className="ml-1 text-xs opacity-90">({pets.length})</span>
+              </button>
+            </div>
+
+            {/* Panel contenido con altura controlada para evitar scroll infinito */}
+            {selectedTab === 'services' && (
+              <section className="mb-6">
+                <h2 className="sr-only">Próximas reservas / Servicios</h2>
+                <div className="space-y-2.5 max-h-[420px] overflow-auto pr-1">
+                  {services.length === 0 && !loading && (
+                    <div className="bg-white rounded-lg p-3 text-sm text-slate-600">No tienes reservas activas</div>
+                  )}
+                  {services.slice(0, svcLimit).map(o => {
                   const isCancelled = (o.status || '').toUpperCase() === 'CANCELLED';
                   return (
                     <div key={o.id} className={`bg-white rounded-lg p-3 ${isCancelled ? 'opacity-60 bg-slate-50' : 'shadow-sm'} flex items-start justify-between`}>
@@ -200,17 +218,29 @@ const ClientDashboard = () => {
                     </div>
                     </div>
                   );
-                })}
-              </div>
-            </section>
-
-            <section className="mb-6">
-              <h2 className="text-lg font-semibold mb-3">Compras recientes / Productos</h2>
-              <div className="space-y-2.5">
-                {products.length === 0 && !loading && (
-                  <div className="bg-white rounded-lg p-3 text-sm text-slate-600">No tienes compras recientes</div>
+                  })}
+                </div>
+                {services.length > svcLimit && (
+                  <div className="mt-3 flex justify-center">
+                    <button className="text-sm text-violet-700 hover:underline" onClick={() => setSvcLimit(l => l + 5)}>Ver más</button>
+                  </div>
                 )}
-                {products.map(o => {
+                {services.length > 0 && svcLimit > 5 && (
+                  <div className="mt-1 flex justify-center">
+                    <button className="text-xs text-slate-500 hover:underline" onClick={() => setSvcLimit(5)}>Ver menos</button>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {selectedTab === 'products' && (
+              <section className="mb-6">
+                <h2 className="sr-only">Compras recientes / Productos</h2>
+                <div className="space-y-2.5 max-h-[420px] overflow-auto pr-1">
+                  {products.length === 0 && !loading && (
+                    <div className="bg-white rounded-lg p-3 text-sm text-slate-600">No tienes compras recientes</div>
+                  )}
+                  {products.slice(0, prodLimit).map(o => {
                   const isCancelled = (o.status || '').toUpperCase() === 'CANCELLED';
                   return (
                     <div key={o.id} className={`bg-white rounded-lg p-3 ${isCancelled ? 'opacity-60 bg-slate-50' : 'shadow-sm'} flex items-start justify-between`}>
@@ -244,9 +274,38 @@ const ClientDashboard = () => {
                       </div>
                     </div>
                   );
-                })}
-              </div>
-            </section>
+                  })}
+                </div>
+                {products.length > prodLimit && (
+                  <div className="mt-3 flex justify-center">
+                    <button className="text-sm text-violet-700 hover:underline" onClick={() => setProdLimit(l => l + 5)}>Ver más</button>
+                  </div>
+                )}
+                {products.length > 0 && prodLimit > 5 && (
+                  <div className="mt-1 flex justify-center">
+                    <button className="text-xs text-slate-500 hover:underline" onClick={() => setProdLimit(5)}>Ver menos</button>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {selectedTab === 'pets' && (
+              <section className="mb-6">
+                <h2 className="sr-only">Mis mascotas</h2>
+                {pets.length === 0 && !loading ? (
+                  <div className="bg-white rounded-lg p-4 text-sm text-slate-600">No tienes mascotas registradas</div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {pets.map((p) => (
+                      <PetRowSmall pet={p} key={p.id} />
+                    ))}
+                  </div>
+                )}
+                <div className="mt-3 text-right">
+                  <Link to="/client/pets" className="text-sm text-violet-700 hover:underline">Gestionar mascotas</Link>
+                </div>
+              </section>
+            )}
           </div>
 
           <aside>
@@ -257,6 +316,9 @@ const ClientDashboard = () => {
                 {pets.map(p => (
                   <PetRowSmall pet={p} key={p.id} />
                 ))}
+              </div>
+              <div className="mt-3 text-right">
+                <Link to="/client/pets" className="text-xs text-violet-700 hover:underline">Ver todas</Link>
               </div>
             </section>
           </aside>

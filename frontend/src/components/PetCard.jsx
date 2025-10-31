@@ -1,4 +1,5 @@
 import React from "react";
+import { assetUrl } from "../lib/api";
 
 function speciesMeta(species) {
   switch (species) {
@@ -51,7 +52,7 @@ export default function PetCard({ pet, onClick, actions }) {
       <div className="absolute left-4 top-4">
         {pet.photo_url && !imgError ? (
           <img
-            src={pet.photo_url}
+            src={assetUrl(pet.photo_url)}
             alt={pet.name}
             className="h-16 w-16 rounded-2xl object-cover ring-2 ring-white shadow-md"
             onError={() => setImgError(true)}

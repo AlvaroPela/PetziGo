@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { api } from '../../lib/api';
+import { api, assetUrl } from '../../lib/api';
 import { toast } from 'react-toastify';
 import Modal from '../../components/Modal';
 import { Input, Select, Textarea, Button } from '../../components/FormComponents';
@@ -23,6 +23,10 @@ const PetManagement = () => {
   });
   const [addImgError, setAddImgError] = useState(false);
   const [editImgError, setEditImgError] = useState(false);
+  const [addImageFile, setAddImageFile] = useState(null);
+  const [addPreviewUrl, setAddPreviewUrl] = useState('');
+  const [editImageFile, setEditImageFile] = useState(null);
+  const [editPreviewUrl, setEditPreviewUrl] = useState('');
 
   // Cargar mascotas del usuario
   useEffect(() => {
@@ -58,13 +62,28 @@ const PetManagement = () => {
         photo_url: newPet.photo_url?.trim() || null,
       };
       const res = await api('/users/pets', { method: 'POST', body: payload });
-      const created = res?.pet || null;
+      let created = res?.pet || null;
+      // Subir imagen si se seleccionó un archivo
+      if (created?.id && addImageFile) {
+        const formData = new FormData();
+        formData.append('image', addImageFile);
+        try {
+          const up = await api(`/users/pets/${created.id}/image`, { method: 'POST', body: formData });
+          if (up?.imageUrl) created = { ...created, photo_url: up.imageUrl };
+        } catch (uploadErr) {
+          console.warn('Error subiendo imagen de mascota:', uploadErr);
+        }
+      }
       if (created) {
         setPets((prev) => [created, ...prev]);
         toast.success('Mascota creada');
       }
       setIsAddingPet(false);
       setNewPet({ name: '', species: 'DOG', breed: '', birth_date: '', special_needs: '', photo_url: '' });
+      // limpiar estados de imagen
+      if (addPreviewUrl) URL.revokeObjectURL(addPreviewUrl);
+      setAddPreviewUrl('');
+      setAddImageFile(null);
     } catch (err) {
       const msg = err.message || 'No se pudo crear la mascota';
       setError(msg);
@@ -84,6 +103,10 @@ const PetManagement = () => {
       special_needs: pet.special_needs || '',
       photo_url: pet.photo_url || ''
     });
+    setEditImageFile(null);
+    if (editPreviewUrl) URL.revokeObjectURL(editPreviewUrl);
+    setEditPreviewUrl('');
+    setEditImgError(false);
   };
 
   const handleUpdatePet = async (e) => {
@@ -101,10 +124,25 @@ const PetManagement = () => {
         photo_url: editPet.photo_url?.trim() || null,
       };
       await api(`/users/pets/${editPet.id}`, { method: 'PUT', body: payload });
+      // Subir imagen si corresponde
+      let updatedPhotoUrl = null;
+      if (editImageFile) {
+        const formData = new FormData();
+        formData.append('image', editImageFile);
+        try {
+          const up = await api(`/users/pets/${editPet.id}/image`, { method: 'POST', body: formData });
+          updatedPhotoUrl = up?.imageUrl || null;
+        } catch (uploadErr) {
+          console.warn('Error subiendo imagen de mascota (edición):', uploadErr);
+        }
+      }
       // Actualizar en estado
-      setPets((prev) => prev.map((p) => (p.id === editPet.id ? { ...p, ...payload } : p)));
+      setPets((prev) => prev.map((p) => (p.id === editPet.id ? { ...p, ...payload, ...(updatedPhotoUrl ? { photo_url: updatedPhotoUrl } : {}) } : p)));
       setEditPet(null);
       toast.success('Mascota actualizada');
+      if (editPreviewUrl) URL.revokeObjectURL(editPreviewUrl);
+      setEditPreviewUrl('');
+      setEditImageFile(null);
     } catch (err) {
       const msg = err.message || 'No se pudo actualizar la mascota';
       setError(msg);
@@ -138,6 +176,52 @@ const PetManagement = () => {
     if (!pets?.length) return 'Aún no has agregado mascotas';
     return `${pets.length} mascota${pets.length !== 1 ? 's' : ''}`;
   }, [loading, error, pets]);
+
+  function onAddFileChange(file) {
+    if (!file) {
+      setAddImageFile(null);
+      if (addPreviewUrl) URL.revokeObjectURL(addPreviewUrl);
+      setAddPreviewUrl('');
+      return;
+    }
+    const valid = /image\/(jpeg|jpg|png|webp)/.test(file.type);
+    if (!valid) {
+      setError('Formato no soportado. Usa JPG, PNG o WEBP.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('La imagen debe ser menor a 5MB.');
+      return;
+    }
+    setError(null);
+    setAddImageFile(file);
+    if (addPreviewUrl) URL.revokeObjectURL(addPreviewUrl);
+    const url = URL.createObjectURL(file);
+    setAddPreviewUrl(url);
+  }
+
+  function onEditFileChange(file) {
+    if (!file) {
+      setEditImageFile(null);
+      if (editPreviewUrl) URL.revokeObjectURL(editPreviewUrl);
+      setEditPreviewUrl('');
+      return;
+    }
+    const valid = /image\/(jpeg|jpg|png|webp)/.test(file.type);
+    if (!valid) {
+      setError('Formato no soportado. Usa JPG, PNG o WEBP.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('La imagen debe ser menor a 5MB.');
+      return;
+    }
+    setError(null);
+    setEditImageFile(file);
+    if (editPreviewUrl) URL.revokeObjectURL(editPreviewUrl);
+    const url = URL.createObjectURL(file);
+    setEditPreviewUrl(url);
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -240,21 +324,28 @@ const PetManagement = () => {
               placeholder="Medicamentos, alergias, etc."
             />
 
-            <Input
-              label="Foto (URL pública, opcional)"
-              type="url"
-              value={newPet.photo_url}
-              onChange={(v) => { setNewPet({ ...newPet, photo_url: v }); setAddImgError(false); }}
-              placeholder="https://..."
-            />
+            {/* Campo URL eliminado por solicitud: ahora solo se sube archivo */}
 
-            {newPet.photo_url && (
+            <div>
+              <label className="text-sm font-medium text-gray-700">O subir imagen (opcional)</label>
+              <div className="mt-1 flex items-center gap-3">
+                <input id="pet-add-image" type="file" accept="image/*" className="hidden" onChange={(e) => onAddFileChange(e.target.files?.[0] || null)} />
+                <label htmlFor="pet-add-image" className="inline-flex cursor-pointer items-center rounded-xl px-3 py-1.5 text-indigo-700 ring-1 ring-indigo-200 hover:bg-indigo-50 text-sm">
+                  Seleccionar archivo
+                </label>
+                {addImageFile && (
+                  <span className="text-xs text-slate-600 truncate max-w-[180px]">{addImageFile.name}</span>
+                )}
+              </div>
+            </div>
+
+            {addPreviewUrl && (
               <div className="mt-2">
                 <span className="text-sm font-medium text-gray-700">Vista previa</span>
                 <div className="mt-2 h-32 w-32 overflow-hidden rounded-xl ring-1 ring-slate-200 grid place-items-center bg-white">
                   {!addImgError ? (
                     <img
-                      src={newPet.photo_url}
+                      src={assetUrl(addPreviewUrl)}
                       alt="Vista previa"
                       className="h-full w-full object-cover"
                       onError={() => setAddImgError(true)}
@@ -320,19 +411,26 @@ const PetManagement = () => {
               onChange={(v) => setEditPet({ ...editPet, special_needs: v })}
               rows={3}
             />
-            <Input
-              label="Foto (URL pública, opcional)"
-              type="url"
-              value={editPet.photo_url}
-              onChange={(v) => { setEditPet({ ...editPet, photo_url: v }); setEditImgError(false); }}
-            />
-            {editPet.photo_url && (
+            {/* Campo URL eliminado por solicitud: ahora solo se sube archivo */}
+            <div>
+              <label className="text-sm font-medium text-gray-700">O subir imagen (opcional)</label>
+              <div className="mt-1 flex items-center gap-3">
+                <input id="pet-edit-image" type="file" accept="image/*" className="hidden" onChange={(e) => onEditFileChange(e.target.files?.[0] || null)} />
+                <label htmlFor="pet-edit-image" className="inline-flex cursor-pointer items-center rounded-xl px-3 py-1.5 text-indigo-700 ring-1 ring-indigo-200 hover:bg-indigo-50 text-sm">
+                  Seleccionar archivo
+                </label>
+                {editImageFile && (
+                  <span className="text-xs text-slate-600 truncate max-w-[180px]">{editImageFile.name}</span>
+                )}
+              </div>
+            </div>
+            {(editPet.photo_url || editPreviewUrl) && (
               <div className="mt-2">
                 <span className="text-sm font-medium text-gray-700">Vista previa</span>
                 <div className="mt-2 h-32 w-32 overflow-hidden rounded-xl ring-1 ring-slate-200 grid place-items-center bg-white">
                   {!editImgError ? (
                     <img
-                      src={editPet.photo_url}
+                      src={assetUrl(editPreviewUrl || editPet.photo_url)}
                       alt="Vista previa"
                       className="h-full w-full object-cover"
                       onError={() => setEditImgError(true)}

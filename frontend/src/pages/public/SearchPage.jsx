@@ -42,7 +42,7 @@ function RecenterOn({ center }) {
 }
 
 const SearchPage = () => {
-  const [view, setView] = useState('map'); // 'map' | 'list'
+  const [view, setView] = useState('list'); // 'map' | 'list' (por defecto: lista)
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
   const [radius, setRadius] = useState(10); // UI únicamente; el endpoint simple no usa radio
@@ -177,20 +177,34 @@ const SearchPage = () => {
           <div className="mt-2 text-xs text-gray-500">
             {usingDefault ? 'Usando ubicación por defecto: Bogotá.' : 'Usando tu ubicación actual.'} {filtered.length} resultados.
           </div>
+          {loading && (
+            <div className="mt-1 flex items-center gap-2 text-xs text-gray-600">
+              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-violet-600 border-t-transparent"></span>
+              Cargando servicios...
+            </div>
+          )}
           {error && <div className="mt-2 text-rose-600 text-sm">{error}</div>}
         </div>
       </div>
 
       {/* Toggle de vista */}
       <div className="container mx-auto px-4 pt-4 flex justify-end gap-2">
-        <Button variant={view === 'map' ? 'primary' : 'outline'} onClick={() => setView('map')}>Mapa</Button>
         <Button variant={view === 'list' ? 'primary' : 'outline'} onClick={() => setView('list')}>Lista</Button>
+        <Button variant={view === 'map' ? 'primary' : 'outline'} onClick={() => setView('map')}>Mapa</Button>
       </div>
 
       {/* Contenido principal */}
       <div className="container mx-auto p-4">
         {view === 'map' ? (
-          <div className="h-[70vh] rounded-xl overflow-hidden border bg-white">
+          <div className="relative h-[70vh] rounded-xl overflow-hidden border bg-white">
+            {loading && (
+              <div className="absolute inset-0 z-10 bg-white/60 backdrop-blur-sm flex items-center justify-center">
+                <div className="flex items-center gap-3 text-violet-800">
+                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-violet-600 border-t-transparent"></span>
+                  <span className="text-sm">Cargando servicios en el mapa…</span>
+                </div>
+              </div>
+            )}
             <MapContainer key={`${center.lat},${center.lng}`} center={[center.lat, center.lng]} zoom={13} className="h-full w-full">
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
               <RecenterOn center={center} />

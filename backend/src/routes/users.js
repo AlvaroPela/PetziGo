@@ -2,8 +2,40 @@ import { Router } from 'express';
 import { body, validationResult } from 'express-validator';
 import { pool } from '../config/db.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
 const router = Router();
+
+// --- Configuración de subida de imágenes de mascotas ---
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const petsUploadDir = path.join(__dirname, '../../uploads/pets');
+try { fs.mkdirSync(petsUploadDir, { recursive: true }); } catch {}
+
+const petsStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, petsUploadDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const name = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+    cb(null, name);
+  }
+});
+
+const petImageUpload = multer({
+  storage: petsStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = /jpeg|jpg|png|webp/;
+    const ok = allowed.test(file.mimetype) && allowed.test(path.extname(file.originalname).toLowerCase());
+    if (ok) return cb(null, true);
+    cb(new Error('Formato de imagen no permitido (usa JPG, PNG o WEBP)'));
+  }
+});
 
 // Obtener usuario actual
 router.get('/me', requireAuth, async (req, res) => {
@@ -144,6 +176,24 @@ router.put('/pets/:id', requireAuth, petValidation, async (req, res) => {
     res.status(500).json({
       message: 'Error al actualizar mascota'
     });
+  }
+});
+
+// Subir imagen de una mascota (propietario)
+router.post('/pets/:id/image', requireAuth, petImageUpload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No se envió ninguna imagen' });
+    const petId = req.params.id;
+    // Verificar propiedad
+    const [rows] = await pool.query('SELECT id FROM pets WHERE id = ? AND user_id = ?', [petId, req.user.id]);
+    if (!rows.length) return res.status(404).json({ message: 'Mascota no encontrada' });
+
+    const imageUrl = `/uploads/pets/${req.file.filename}`;
+    await pool.query('UPDATE pets SET photo_url = ?, updated_at = NOW() WHERE id = ?', [imageUrl, petId]);
+    res.status(200).json({ ok: true, imageUrl });
+  } catch (err) {
+    console.error('Error subiendo imagen de mascota:', err);
+    res.status(500).json({ message: 'Error subiendo imagen de mascota' });
   }
 });
 
