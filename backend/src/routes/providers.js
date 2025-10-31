@@ -39,7 +39,8 @@ const router = Router();
 
 // Buscar proveedores verificados (público)
 router.get('/', [
-  query('category').optional().isIn(['WALKING', 'VETERINARY', 'TRAINING', 'GROOMING', 'DAYCARE', 'OTHER']),
+  // Categorías alineadas con `services.js` (ES):
+  query('category').optional().isIn(['PASEO', 'VETERINARIA', 'ENTRENAMIENTO', 'ESTETICA', 'GUARDERIA', 'OTRO']),
   query('lat').optional().isFloat({ min: -90, max: 90 }),
   query('lng').optional().isFloat({ min: -180, max: 180 }),
   query('radius').optional().isInt({ min: 1, max: 50 }) // radio en km
@@ -50,30 +51,102 @@ router.get('/', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { category, lat, lng, radius = 10 } = req.query;
+  const { category, lat, lng, radius = 10 } = req.query;
+
+    // Construimos una consulta que:
+    // - Devuelva proveedores verificados y activos, con su ubicación (provider_profiles)
+    // - Incluya el conteo de servicios activos por proveedor (filtrado por categoría si se envía)
+    // - Aplique un filtro de existencia por categoría si se envía (solo proveedores con al menos un servicio de esa categoría)
+    // - Aplique filtro por distancia (Haversine) usando la ubicación del perfil del proveedor
+
+    const values = [];
+    const selectServicesCount = category
+      ? `COUNT(DISTINCT CASE WHEN s.category = ? THEN s.id END) AS services_count`
+      : `COUNT(DISTINCT s.id) AS services_count`;
+    if (category) values.push(category);
 
     let query = `
-      SELECT DISTINCT p.user_id, u.name, u.email, p.business_description,
-             p.location_lat, p.location_lng, p.average_rating, p.total_reviews
+      SELECT 
+        p.user_id, u.name, u.email, p.business_description,
+        p.location_lat, p.location_lng, p.average_rating, p.total_reviews,
+        ${selectServicesCount},
+        (SELECT COUNT(*) FROM services sx WHERE sx.provider_id = p.user_id) AS services_total_any,
+        (SELECT COUNT(*) FROM services sx WHERE sx.provider_id = p.user_id AND sx.active = 1) AS services_total_active,
+        COALESCE(
+          (
+            SELECT s3.id FROM services s3
+            WHERE s3.provider_id = p.user_id
+            ${category ? 'AND s3.category = ?' : ''}
+            AND s3.active = 1
+            ORDER BY s3.created_at DESC
+            LIMIT 1
+          ),
+          (
+            SELECT s3b.id FROM services s3b
+            WHERE s3b.provider_id = p.user_id
+            ${category ? 'AND s3b.category = ?' : ''}
+            ORDER BY s3b.created_at DESC
+            LIMIT 1
+          )
+        ) AS sample_service_id,
+        COALESCE(
+          (
+            SELECT s4.title FROM services s4
+            WHERE s4.provider_id = p.user_id
+            ${category ? 'AND s4.category = ?' : ''}
+            AND s4.active = 1
+            ORDER BY s4.created_at DESC
+            LIMIT 1
+          ),
+          (
+            SELECT s4b.title FROM services s4b
+            WHERE s4b.provider_id = p.user_id
+            ${category ? 'AND s4b.category = ?' : ''}
+            ORDER BY s4b.created_at DESC
+            LIMIT 1
+          )
+        ) AS sample_service_title,
+        COALESCE(
+          (
+            SELECT s5.price FROM services s5
+            WHERE s5.provider_id = p.user_id
+            ${category ? 'AND s5.category = ?' : ''}
+            AND s5.active = 1
+            ORDER BY s5.created_at DESC
+            LIMIT 1
+          ),
+          (
+            SELECT s5b.price FROM services s5b
+            WHERE s5b.provider_id = p.user_id
+            ${category ? 'AND s5b.category = ?' : ''}
+            ORDER BY s5b.created_at DESC
+            LIMIT 1
+          )
+        ) AS sample_service_price
       FROM provider_profiles p
       INNER JOIN users u ON p.user_id = u.id
-      LEFT JOIN services s ON p.user_id = s.provider_id
-      WHERE p.verified = 1 AND u.status = 'ACTIVE'
+      LEFT JOIN services s ON s.provider_id = p.user_id
+      WHERE u.status = 'ACTIVE'
     `;
-    const values = [];
 
     if (category) {
-      query += ` AND s.category = ?`;
+      // Añadir valores para las subconsultas del SELECT (en el mismo orden de aparición)
+      // Para COALESCE: (id activo, id cualquiera), (title activo, title cualquiera), (price activo, price cualquiera)
+      values.push(category, category, category, category, category, category);
+      query += ` AND EXISTS (
+        SELECT 1 FROM services s2
+        WHERE s2.provider_id = p.user_id AND s2.category = ?
+      )`;
       values.push(category);
     }
 
     if (lat && lng) {
-      // Fórmula Haversine para distancia
+      // Filtro por distancia usando Haversine, radio en km
       query += `
         AND (
           6371 * acos(
-            cos(radians(?)) * cos(radians(p.location_lat)) 
-            * cos(radians(p.location_lng) - radians(?)) 
+            cos(radians(?)) * cos(radians(p.location_lat))
+            * cos(radians(p.location_lng) - radians(?))
             + sin(radians(?)) * sin(radians(p.location_lat))
           )
         ) <= ?
@@ -81,7 +154,11 @@ router.get('/', [
       values.push(lat, lng, lat, radius);
     }
 
-    query += ` ORDER BY p.average_rating DESC`;
+    query += `
+      GROUP BY p.user_id, u.name, u.email, p.business_description,
+               p.location_lat, p.location_lng, p.average_rating, p.total_reviews
+      ORDER BY p.average_rating DESC
+    `;
 
     const [providers] = await pool.query(query, values);
 
