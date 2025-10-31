@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Button, Input, Textarea, Select, Card } from "../../components/FormComponents";
-import { api } from "../../lib/api";
+import { api, assetUrl } from "../../lib/api";
 import { useAuth } from "../../auth/AuthProvider";
+import Modal from "../../components/Modal";
 
 const ServiceBooking = () => {
 	const { id } = useParams();
@@ -24,6 +25,16 @@ const ServiceBooking = () => {
 	const [petsLoading, setPetsLoading] = useState(false);
 	const { user, loading: authLoading } = useAuth();
 	const location = useLocation();
+
+	const [imgModal, setImgModal] = useState({ open: false, src: null, alt: '' });
+
+	const fmtCOP = (n) => {
+		try { return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(Number(n||0)); } catch { return `$ ${n}`; }
+	};
+
+	const unitPrice = useMemo(() => Number(service?.price || 0), [service]);
+	const qty = useMemo(() => Math.max(1, Number(quantity || 1)), [quantity]);
+	const total = useMemo(() => unitPrice * qty, [unitPrice, qty]);
 
 
 
@@ -120,16 +131,16 @@ const ServiceBooking = () => {
 								const summary = {
 									itemType: 'SERVICE',
 									title: service.title || `Reserva #${res.id}`,
-									unit_price: Number(service.price) || 0,
-									quantity: Number(quantity) || 1,
-									total: (Number(service.price) || 0) * (Number(quantity) || 1)
+									unit_price: unitPrice,
+									quantity: qty,
+									total: unitPrice * qty
 								};
 								localStorage.setItem(`mp_order_summary_${res.id}`, JSON.stringify(summary));
 							} catch (e) { /* ignore */ }
 							const prefBody = {
 							title: service.title || `Reserva #${res.id}`,
-							quantity: Number(quantity) || 1,
-							unit_price: Number(service.price) || 0,
+							quantity: qty,
+							unit_price: unitPrice,
 							external_reference: res.id
 						};
 						const pref = await api("/payments/create-preference", { method: "POST", body: prefBody });
@@ -182,50 +193,81 @@ const ServiceBooking = () => {
 		<div className="min-h-screen bg-gray-50 p-6">
 			<div className="max-w-4xl mx-auto">
 				<Card title={`Reservar: ${service.title}`} description={`Proveedor: ${service.provider_name || service.providerName || ""}`} actions={null}>
-					<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-						<div className="md:col-span-1">
-							<div className="space-y-3">
-								<div className="text-sm text-slate-600">Precio</div>
-								<div className="text-2xl font-semibold">${Number(service.price).toFixed(2)}</div>
-								{service.location_lat && service.location_lng && <div className="text-sm text-slate-500">Ubicación registrada</div>}
-								<div className="pt-4">
+					<form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-12 gap-6">
+						{/* Columna izquierda: imagen + info + formulario */}
+						<div className="md:col-span-8">
+							<div
+								className="relative mx-auto w-full md:max-w-md h-40 md:h-48 overflow-hidden rounded-xl bg-slate-50 flex items-center justify-center"
+								onClick={() => { if (service.image_url) setImgModal({ open: true, src: assetUrl(service.image_url), alt: service.title }); }}
+								role={service.image_url ? 'button' : undefined}
+								aria-label={service.image_url ? 'Abrir imagen' : undefined}
+								style={{ cursor: service.image_url ? 'zoom-in' : 'default' }}
+							>
+								{service.image_url ? (
+									<>
+										<img src={assetUrl(service.image_url)} alt={service.title} className="h-full w-full object-cover" />
+										<div className="absolute bottom-1 right-1 rounded bg-black/55 text-white text-[10px] px-1.5 py-0.5 pointer-events-none select-none">Haz clic para ampliar</div>
+									</>
+								) : (
+									<div className="text-xs text-slate-500">Sin imagen</div>
+								)}
+							</div>
+							<div className="mt-3 text-sm text-slate-600 space-y-1">
+								<div>Precio unitario: <span className="font-medium">{fmtCOP(unitPrice)}</span></div>
+								{service.location_lat && service.location_lng && <div>Ubicación registrada</div>}
+								<div className="pt-2">
 									<div className="text-sm text-slate-500">Detalles</div>
-									<p className="text-sm text-slate-700">{service.short_description || service.description?.slice(0, 200)}</p>
+									<p className="text-sm text-slate-700">{service.short_description || service.description?.slice(0, 260)}</p>
 								</div>
+							</div>
+
+							{/* Formulario principal (no en el panel sticky) */}
+							<div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+								<Input label="Fecha" type="date" value={serviceDay} onChange={setServiceDay} className="w-full" />
+								<Input label="Hora" type="time" value={serviceTime} onChange={setServiceTime} className="w-full" step="300" />
+								<Select
+									label="Mascota"
+									value={petId}
+									onChange={setPetId}
+									options={
+										petsLoading
+											? [{ value: "", label: "Cargando mascotas..." }]
+											: [
+												{ value: "", label: "Seleccionar (opcional)" },
+												...pets.map((p) => ({ value: String(p.id), label: `${p.name} — ${p.species || ""}` })),
+											]
+									}
+								/>
+								<Textarea label="Notas (opcional)" value={notes} onChange={setNotes} rows={3} />
+								<Input label="Dirección del servicio (opcional)" value={address} onChange={setAddress} className="w-full" />
 							</div>
 						</div>
 
-						<div className="md:col-span-2">
-							<form onSubmit={handleSubmit} className="space-y-4">
-								<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-									<Input label="Cantidad" type="number" value={quantity} onChange={setQuantity} className="w-full" />
-									<Input label="Fecha" type="date" value={serviceDay} onChange={setServiceDay} className="w-full" />
-									<Input label="Hora" type="time" value={serviceTime} onChange={setServiceTime} className="w-full" step="300" />
+						{/* Columna derecha: panel de reserva sticky */}
+						<aside className="md:col-span-4">
+							<div className="bg-gray-50 rounded-lg p-4 sticky top-4">
+								<div className="grid grid-cols-1 gap-3">
+									<div>
+										<label className="block text-sm font-medium text-slate-700">Cantidad</label>
+										<div className="mt-1 inline-flex items-center gap-2">
+											<Button type="button" variant="outline" onClick={() => setQuantity(q => Math.max(1, Number(q||1) - 1))} className="!px-3">-</Button>
+											<Input type="number" value={quantity} onChange={(v) => {
+												const n = Math.max(1, parseInt(v || '1', 10));
+												setQuantity(n);
+											}} min="1" className="w-24 text-center" />
+											<Button type="button" variant="outline" onClick={() => setQuantity(q => Math.max(1, Number(q||1) + 1))} className="!px-3">+</Button>
+										</div>
+									</div>
 								</div>
 
-								<div>
-									<Select
-										label="Mascota"
-										value={petId}
-										onChange={setPetId}
-										options={
-											petsLoading
-												? [{ value: "", label: "Cargando mascotas..." }]
-												: [
-														{ value: "", label: "Seleccionar (opcional)" },
-														...pets.map((p) => ({ value: String(p.id), label: `${p.name} — ${p.species || ""}` })),
-												  ]
-										}
-									/>
+								<div className="mt-4 border-t pt-3 flex items-center justify-between">
+									<div className="text-sm text-slate-600">Total</div>
+									<div className="text-2xl font-semibold text-petzi">{fmtCOP(total)}</div>
 								</div>
 
-								<Textarea label="Notas (opcional)" value={notes} onChange={setNotes} rows={4} />
+								{error && <div className="mt-2 text-rose-600">{error}</div>}
 
-								<Input label="Dirección del servicio (opcional)" value={address} onChange={setAddress} className="w-full" />
-
-								{error && <div className="text-rose-600">{error}</div>}
-
-								<div className="flex gap-2">
+								<div className="mt-4 flex gap-2">
 									<Button type="submit" variant="primary" disabled={submitting}>
 										{submitting ? "Reservando…" : "Confirmar reserva"}
 									</Button>
@@ -233,10 +275,21 @@ const ServiceBooking = () => {
 										Volver
 									</Button>
 								</div>
-							</form>
-						</div>
-					</div>
+							</div>
+						</aside>
+					</form>
 				</Card>
+
+				{/* Modal imagen */}
+				<Modal isOpen={imgModal.open} onClose={() => setImgModal({ open: false, src: null, alt: '' })} ariaLabel="Imagen del servicio">
+					<div className="max-w-3xl mx-auto">
+						{imgModal.src ? (
+							<img src={imgModal.src} alt={imgModal.alt} className="max-h-[80vh] w-auto mx-auto rounded" />
+						) : (
+							<div className="text-slate-500 text-sm">Sin imagen</div>
+						)}
+					</div>
+				</Modal>
 			</div>
 		</div>
 	);
