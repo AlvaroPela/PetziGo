@@ -13,7 +13,6 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pendingProviders, setPendingProviders] = useState([]);
-  const [recentReviews, setRecentReviews] = useState([]);
 
   useEffect(() => {
     let mounted = true;
@@ -21,25 +20,25 @@ const AdminDashboard = () => {
       setLoading(true);
       setError('');
       try {
-        const [usersRes, providersRes, servicesRes, reviewsRes] = await Promise.all([
+        const [usersRes, providersListRes, servicesRes] = await Promise.all([
           api('/users/admin/list').catch(() => ({ users: [] })),
-          api('/providers/admin/pending').catch(() => ({ providers: [] })),
+          api('/providers/admin/list').catch(() => ({ providers: [] })),
           api('/services').catch(() => ({ services: [] })),
-          api('/reviews').catch(() => ([])),
         ]);
 
         if (!mounted) return;
         const users = usersRes?.users || [];
-        const providers = providersRes?.providers || [];
+        const providersAll = providersListRes?.providers || [];
         const services = servicesRes?.services || [];
-        const reviews = Array.isArray(reviewsRes) ? reviewsRes : [];
+
+        // Pending providers should include not-verified providers regardless of user.status
+        const providers = providersAll.filter(p => !p.verified);
         setPendingProviders(providers);
-        setRecentReviews(reviews.slice(0, 6));
         setStats({
           users: users.length,
           providersPending: providers.length,
           servicesActive: services.length,
-          reviews: reviews.length,
+          reviews: 0,
         });
       } catch (e) {
         setError(e?.message || 'Error cargando datos');
@@ -89,6 +88,9 @@ const AdminDashboard = () => {
         <header className="mb-8">
           <h1 className="text-3xl font-bold text-gray-800">Panel de Administración</h1>
           {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
+          <div className="mt-3">
+            <a href="/admin/users" className="px-3 py-1 rounded bg-violet-600 text-white hover:bg-violet-700">Ir a Gestión de Usuarios</a>
+          </div>
         </header>
 
         {/* Estadísticas */}
@@ -128,30 +130,7 @@ const AdminDashboard = () => {
           </div>
         </section>
 
-        {/* Últimas Reseñas */}
-        <section className="mb-8">
-          <h2 className="text-xl font-semibold mb-4">Últimas Reseñas</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {loading ? (
-              <div className="bg-white rounded-lg shadow p-6 text-gray-500">Cargando…</div>
-            ) : recentReviews.length === 0 ? (
-              <div className="bg-white rounded-lg shadow p-6 text-gray-500">Sin reseñas</div>
-            ) : (
-              recentReviews.map((r) => (
-                <div key={r.id} className="bg-white rounded-lg shadow p-6">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-gray-700">{r.userName}</div>
-                    <div className="text-yellow-500 font-semibold">{r.rating}★</div>
-                  </div>
-                  <p className="mt-2 text-gray-800 text-sm">{r.comment || '—'}</p>
-                  <div className="mt-2 text-xs text-gray-500">
-                    {r.itemType === 'PRODUCT' ? `Producto: ${r.productName || '—'}` : `Servicio: ${r.serviceTitle || '—'}`}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
+        {/* removed 'Últimas Reseñas' per request */}
       </div>
     </div>
   );

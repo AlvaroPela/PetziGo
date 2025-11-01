@@ -92,6 +92,8 @@ router.get('/', [
       INNER JOIN users u ON s.provider_id = u.id
       INNER JOIN provider_profiles pp ON s.provider_id = pp.user_id
       WHERE s.active = 1
+        AND u.status = 'ACTIVE'
+        AND pp.verified = 1
         AND pp.location_lat IS NOT NULL
         AND pp.location_lng IS NOT NULL
     `;
@@ -170,7 +172,7 @@ router.get('/:id', async (req, res) => {
        INNER JOIN users u ON s.provider_id = u.id
        INNER JOIN provider_profiles pp ON s.provider_id = pp.user_id
        WHERE s.id = ? AND s.active = 1
-       AND u.status = 'ACTIVE'`,
+       AND u.status = 'ACTIVE' AND pp.verified = 1`,
       [serviceId]
     );
 

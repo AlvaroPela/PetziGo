@@ -14,6 +14,8 @@ export default function Sidebar() {
     { name: 'Panel', path: dashboardPath, icon: '📊', protected: true },
     { name: 'Servicios', path: '/services', icon: '🐾', protected: false },
     { name: 'Productos', path: '/products', icon: '🦴', protected: false },
+    // Admin-only quick link to user management
+    { name: 'Usuarios (Admin)', path: '/admin/users', icon: '👥', protected: true, onlyRole: 'ADMIN' },
     // Mascotas sólo para clientes
     { name: 'Mascotas', path: '/client/pets', icon: '🐱', protected: true, onlyRole: 'CLIENT' },
     { name: 'Buscar', path: '/search', icon: '🔍', protected: false },
@@ -81,13 +83,21 @@ export default function Sidebar() {
 
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-violet-800">
         {user ? (
-          <div className="flex items-center space-x-3 p-3">
+          // Make the user card clickable and navigate to the appropriate profile path depending on role
+          <button
+            onClick={() => {
+              const profilePath = user.role === 'PROVIDER' ? '/provider/profile' : user.role === 'CLIENT' ? '/client/profile' : '/admin';
+              navigate(profilePath);
+            }}
+            className="w-full flex items-center space-x-3 p-3 hover:bg-violet-900 rounded-lg transition-colors text-left"
+            title="Ver y editar mi perfil"
+          >
             <span className="text-xl">👤</span>
             <div className="truncate">
               <div className="text-sm font-semibold">{user.name || user.email}</div>
               <div className="text-xs text-violet-200">{user.role}</div>
             </div>
-          </div>
+          </button>
         ) : (
           <Link to="/login" className="flex items-center space-x-3 p-3 hover:bg-violet-900 rounded-lg transition-colors">
             <span className="text-xl">🔑</span>

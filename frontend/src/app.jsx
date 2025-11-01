@@ -23,6 +23,7 @@ import RegisterPage from "./pages/auth/Register";
 // Client Pages
 import ClientDashboard from "./pages/client/Dashboard";
 import PetManagement from "./pages/client/PetManagement";
+import ClientProfile from "./pages/client/Profile";
 import RequireRole from "./auth/RequireRole";
 import WalkTracker from "./pages/client/WalkTracker";
 
@@ -75,6 +76,7 @@ export function App() {
 					{/* Protected Client Routes */}
 					<Route path="client" element={<RequireRole allowedRoles={["CLIENT"]} />}>
 						<Route index element={<ClientDashboard />} />
+						<Route path="profile" element={<ClientProfile />} />
 						<Route path="pets" element={<PetManagement />} />
             <Route path="walk/:orderId" element={<WalkTracker />} />
 					</Route>

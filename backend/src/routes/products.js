@@ -94,10 +94,12 @@ router.get('/', [
 			SELECT p.*, u.name as provider_name, 
              pp.average_rating, pp.total_reviews,
              pp.location_lat, pp.location_lng
-      FROM products p
-      INNER JOIN users u ON p.provider_id = u.id
-      INNER JOIN provider_profiles pp ON p.provider_id = pp.user_id
-      WHERE p.active = 1
+			FROM products p
+			INNER JOIN users u ON p.provider_id = u.id
+			INNER JOIN provider_profiles pp ON p.provider_id = pp.user_id
+			WHERE p.active = 1
+				AND u.status = 'ACTIVE'
+				AND pp.verified = 1
     `;
 
     const values = [];
@@ -180,11 +182,11 @@ router.get('/:id', [param('id').isInt({ min: 1 })], async (req, res) => {
 		const productId = req.params.id;
 
 		const [[productRow]] = await pool.query(
-			`SELECT p.*, u.name as provider_name, pp.business_description, pp.average_rating, pp.total_reviews, pp.location_lat, pp.location_lng
+			`SELECT p.*, u.name as provider_name, pp.business_description, pp.average_rating, pp.total_reviews, pp.location_lat, pp.location_lng, pp.verified
 			 FROM products p
 			 INNER JOIN users u ON p.provider_id = u.id
-			 LEFT JOIN provider_profiles pp ON p.provider_id = pp.user_id
-			 WHERE p.id = ? AND p.active = 1`,
+			 INNER JOIN provider_profiles pp ON p.provider_id = pp.user_id
+			 WHERE p.id = ? AND p.active = 1 AND u.status = 'ACTIVE' AND pp.verified = 1`,
 			[productId]
 		);
 

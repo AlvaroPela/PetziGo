@@ -46,6 +46,7 @@ router.get('/', [
   query('radius').optional().isInt({ min: 1, max: 50 }) // radio en km
 ], async (req, res) => {
   try {
+    console.log('[providers] GET / - query:', req.query);
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
@@ -68,7 +69,7 @@ router.get('/', [
     let query = `
       SELECT 
         p.user_id, u.name, u.email, p.business_description,
-        p.location_lat, p.location_lng, p.average_rating, p.total_reviews,
+        p.location_lat, p.location_lng, p.average_rating, p.total_reviews, p.verified,
         ${selectServicesCount},
         (SELECT COUNT(*) FROM services sx WHERE sx.provider_id = p.user_id) AS services_total_any,
         (SELECT COUNT(*) FROM services sx WHERE sx.provider_id = p.user_id AND sx.active = 1) AS services_total_active,
@@ -156,7 +157,7 @@ router.get('/', [
 
     query += `
       GROUP BY p.user_id, u.name, u.email, p.business_description,
-               p.location_lat, p.location_lng, p.average_rating, p.total_reviews
+               p.location_lat, p.location_lng, p.average_rating, p.total_reviews, p.verified
       ORDER BY p.average_rating DESC
     `;
 
@@ -172,6 +173,28 @@ router.get('/', [
   }
 });
 
+// Obtener perfil del proveedor autenticado (propio) - permite edición desde el frontend
+router.get('/me', requireAuth, requireRole(['PROVIDER']), async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const [[row]] = await pool.query(
+      `SELECT business_description, location_lat, location_lng, average_rating, total_reviews, verified
+       FROM provider_profiles WHERE user_id = ? LIMIT 1`,
+      [userId]
+    );
+
+    // If provider profile doesn't exist yet, return a default empty profile so frontend can render form
+    if (!row) {
+      return res.json({ profile: { business_description: '', location_lat: null, location_lng: null, average_rating: 0, total_reviews: 0, verified: false } });
+    }
+
+    res.json({ profile: row });
+  } catch (err) {
+    console.error('Error en GET /providers/me', err);
+    res.status(500).json({ message: 'Error al obtener perfil del proveedor' });
+  }
+});
+
 // Obtener perfil público de un proveedor
 router.get('/:id', async (req, res) => {
   try {
@@ -179,7 +202,7 @@ router.get('/:id', async (req, res) => {
 
     const [[provider]] = await pool.query(
       `SELECT p.user_id, u.name, u.email, p.business_description,
-              p.location_lat, p.location_lng, p.average_rating, p.total_reviews
+              p.location_lat, p.location_lng, p.average_rating, p.total_reviews, p.verified
        FROM provider_profiles p
        INNER JOIN users u ON p.user_id = u.id
        WHERE p.user_id = ? AND p.verified = 1 AND u.status = 'ACTIVE'`,
@@ -257,7 +280,8 @@ router.put('/profile', requireAuth, requireRole(['PROVIDER']), [
 
     const { business_description, location_lat, location_lng } = req.body;
 
-    await pool.query(
+    // Try update first
+    const [result] = await pool.query(
       `UPDATE provider_profiles
        SET business_description = ?,
            location_lat = ?,
@@ -265,10 +289,19 @@ router.put('/profile', requireAuth, requireRole(['PROVIDER']), [
        WHERE user_id = ?`,
       [business_description, location_lat, location_lng, req.user.id]
     );
+    console.log('[providers] UPDATE result:', result);
 
-    res.json({
-      message: 'Perfil de proveedor actualizado exitosamente'
-    });
+    // If no rows updated, insert a new profile (user may have been created without a provider_profiles row)
+    if (result.affectedRows === 0) {
+      const [ins] = await pool.query(
+        `INSERT INTO provider_profiles (user_id, business_description, location_lat, location_lng)
+         VALUES (?, ?, ?, ?)`,
+        [req.user.id, business_description, location_lat, location_lng]
+      );
+      console.log('[providers] INSERT result:', ins);
+    }
+
+    res.json({ message: 'Perfil de proveedor actualizado exitosamente' });
 
   } catch (err) {
     console.error('Error al actualizar perfil de proveedor:', err);
@@ -358,6 +391,25 @@ router.get('/admin/pending', requireAuth, requireRole(['ADMIN']), async (req, re
   }
 });
 
+// Listar todos los proveedores para administración (incluye verified y count de certificaciones pendientes)
+router.get('/admin/list', requireAuth, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    const [providers] = await pool.query(
+      `SELECT p.user_id, u.name, u.email, p.business_description,
+              p.location_lat, p.location_lng, p.verified, u.status,
+              (SELECT COUNT(*) FROM certifications c WHERE c.provider_id = p.user_id AND c.status = 'PENDING') as pending_certifications
+       FROM provider_profiles p
+       INNER JOIN users u ON p.user_id = u.id
+       ORDER BY u.created_at DESC`
+    );
+
+    res.json({ providers });
+  } catch (err) {
+    console.error('Error al listar proveedores para admin:', err);
+    res.status(500).json({ message: 'Error al listar proveedores' });
+  }
+});
+
 // Validar proveedor
 router.patch('/admin/verify/:id', requireAuth, requireRole(['ADMIN']), async (req, res) => {
   try {
@@ -426,8 +478,6 @@ router.patch('/admin/certifications/:id', requireAuth, requireRole(['ADMIN']), [
   }
 });
 
-export default router;
-
 // Actualizar ubicación en vivo del proveedor (heartbeat cada 10s)
 router.post('/me/location', requireAuth, requireRole(['PROVIDER']), [
   body('latitude').isFloat({ min: -90, max: 90 }),
@@ -486,3 +536,9 @@ router.get('/:id/location', async (req, res) => {
     res.status(500).json({ message: 'Error al obtener ubicación' });
   }
 });
+
+// (La ruta /me fue movida más arriba para evitar colisión con /:id)
+
+// (La ruta /me fue movida más arriba para evitar colisión con /:id)
+
+export default router;
