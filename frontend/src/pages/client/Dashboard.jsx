@@ -205,7 +205,7 @@ const ClientDashboard = () => {
                     </div>
                     <div className="text-right">
                         <div className={`inline-block px-3 py-0.5 rounded-full text-xs ${statusBadge(o.status)}`}>
-                          {(o.itemType === 'SERVICE' || o.item_type === 'SERVICE') && ['PENDING','CREATED'].includes((o.status||'').toUpperCase()) && (o.paymentStatus||'').toUpperCase() === 'COMPLETED'
+                          {(o.itemType === 'SERVICE' || o.item_type === 'SERVICE') && ['PENDING'].includes((o.status||'').toUpperCase())
                             ? 'Pendiente de aprobación'
                             : o.status}
                         </div>
@@ -214,6 +214,47 @@ const ClientDashboard = () => {
                           (o.paymentStatus || '').toUpperCase() === 'COMPLETED'
                             ? <div className="text-xs text-slate-500 mt-1">Pago: Confirmado</div>
                             : <div className="text-xs text-slate-500 mt-1">Pago: {o.paymentStatus}</div>
+                        )}
+                        {/* Mensaje para servicios en curso y pagados: pago recibido, pendiente de finalización por el proveedor */}
+                        {((o.itemType || o.item_type) === 'SERVICE') && (o.status || '').toUpperCase() === 'IN_PROGRESS' && (o.paymentStatus || '').toUpperCase() === 'COMPLETED' && (
+                          <div className="mt-2 text-sm rounded border border-emerald-100 bg-emerald-50 text-emerald-700 p-2">
+                            Pago recibido — Reserva confirmada ✨¡Te esperamos!✨.
+                          </div>
+                        )}
+                        {/* Botón de pagar solo para servicios aceptados y pago pendiente */}
+                        {((o.itemType || o.item_type) === 'SERVICE') && (o.status || '').toUpperCase() === 'ACCEPTED' && (o.paymentStatus || '').toUpperCase() === 'PENDING' && (
+                          <div className="mt-2">
+                            <button
+                              className="text-xs px-2 py-1 rounded bg-violet-600 text-white hover:bg-violet-700"
+                              onClick={async () => {
+                                try {
+                                  const title = o.serviceTitle || `Servicio #${o.id}`;
+                                  const quantity = o.quantity || 1;
+                                  const unit_price = Number(o.servicePrice || o.totalAmount || 0) / quantity || 0;
+                                  // Guardar resumen para recibo local
+                                  try { localStorage.setItem('currentOrderId', String(o.id)); } catch {}
+                                  try { localStorage.setItem(`mp_order_summary_${o.id}`, JSON.stringify({ title, quantity, unit_price, total: unit_price * quantity })); } catch {}
+                                  const pref = await api('/payments/create-preference', { method: 'POST', body: { title, quantity, unit_price, external_reference: o.id } });
+                                  const redirectUrl = pref?.init_point || pref?.sandbox_init_point;
+                                  if (redirectUrl) {
+                                    try {
+                                      const popup = window.open(redirectUrl, 'mp_checkout', 'width=900,height=700');
+                                      window.__mpPopupRef = popup;
+                                      window.__mpCurrentOrderId = String(o.id);
+                                      localStorage.setItem(`mp_init_point_${o.id}`, redirectUrl);
+                                      const deadline = Date.now() + 1 * 60 * 1000;
+                                      localStorage.setItem(`mp_wait_deadline_${o.id}`, String(deadline));
+                                    } catch {}
+                                    window.location.assign(`/payments/wait?external_reference=${encodeURIComponent(o.id)}`);
+                                  } else {
+                                    alert('No se pudo iniciar el pago. Intenta más tarde.');
+                                  }
+                                } catch (err) {
+                                  alert(err?.message || 'Error al iniciar pago');
+                                }
+                              }}
+                            >Pagar ahora</button>
+                          </div>
                         )}
                     </div>
                     </div>

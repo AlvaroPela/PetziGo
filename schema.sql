@@ -119,6 +119,8 @@ CREATE TABLE IF NOT EXISTS orders (
   pet_id INT DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  notifications_sent TINYINT(1) DEFAULT 0,
+  notifications_sent_at DATETIME NULL,
   FOREIGN KEY (user_id) REFERENCES users(id),
   FOREIGN KEY (provider_id) REFERENCES provider_profiles(user_id),
   FOREIGN KEY (service_id) REFERENCES services(id),
@@ -137,6 +139,19 @@ CREATE TABLE IF NOT EXISTS order_items (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (order_id) REFERENCES orders(id)
 );
+
+-- Historial de cambios de estado de la orden (soporte para auditoría de aceptación y demás)
+CREATE TABLE IF NOT EXISTS order_status_history (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  order_id INT NOT NULL,
+  old_status ENUM('CREATED','PENDING','ACCEPTED','IN_PROGRESS','COMPLETED','CANCELLED','DELIVERED') NULL,
+  new_status ENUM('CREATED','PENDING','ACCEPTED','IN_PROGRESS','COMPLETED','CANCELLED','DELIVERED') NOT NULL,
+  changed_by INT NOT NULL,
+  changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (order_id) REFERENCES orders(id),
+  FOREIGN KEY (changed_by) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_order_status_history_order ON order_status_history(order_id);
 
 -- Reseñas
 CREATE TABLE IF NOT EXISTS reviews (

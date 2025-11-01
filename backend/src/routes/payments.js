@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import dotenv from 'dotenv';
 import { pool } from '../config/db.js';
+import { sendOrderEmails } from '../lib/mailer.js';
 
 dotenv.config();
 
@@ -147,9 +148,9 @@ router.post('/webhook', async (req, res) => {
     let paymentStatus = 'PROCESSING';
     let orderStatus = null;
     if (status === 'approved' || status === 'paid') {
-      // Pago aprobado: solo actualizamos payment_status, NO tocamos status de la orden
+      // Pago aprobado: marcar pago COMPLETED; estado de la orden depende del tipo
       paymentStatus = 'COMPLETED';
-      orderStatus = null;
+      // orderStatus se resolverá abajo según item_type
     } else if (status === 'pending') {
       paymentStatus = 'PROCESSING';
     } else if (status === 'cancelled' || status === 'canceled') {
@@ -163,6 +164,30 @@ router.post('/webhook', async (req, res) => {
 
     const prefId = paymentData.preference_id || null;
     const externalRef = paymentData.external_reference || null;
+
+    // Resolver estado objetivo según el tipo de orden (sólo para pagos aprobados)
+    if ((paymentStatus || '').toUpperCase() === 'COMPLETED') {
+      try {
+        let row = null;
+        if (externalRef) {
+          const [[o]] = await pool.query('SELECT id, item_type FROM orders WHERE id = ? LIMIT 1', [externalRef]);
+          row = o || null;
+        }
+        if (!row && prefId) {
+          const [[o2]] = await pool.query('SELECT id, item_type FROM orders WHERE mercadopago_preference_id = ? LIMIT 1', [prefId]);
+          row = o2 || null;
+        }
+        if (row && (row.item_type || '').toUpperCase() === 'SERVICE') {
+          orderStatus = 'IN_PROGRESS';
+        } else {
+          // Para productos u otros, no forzar estado; mantener el actual
+          orderStatus = null;
+        }
+      } catch (e) {
+        // Si falla la consulta, no cambiamos el estado de la orden
+        orderStatus = null;
+      }
+    }
 
     try {
       if (prefId) {
@@ -187,6 +212,23 @@ router.post('/webhook', async (req, res) => {
       } catch (fallbackErr) {
         console.error('[MP webhook] fallback error marcando PROCESSING:', fallbackErr?.message || String(fallbackErr));
       }
+    }
+
+    // Enviar correos si el pago quedó COMPLETED (idempotente por marca en BD)
+    try {
+      if ((paymentStatus || '').toUpperCase() === 'COMPLETED') {
+        if (externalRef) {
+          await sendOrderEmails(externalRef);
+        } else if (prefId) {
+          // Buscar orderId por preference_id
+          try {
+            const [[o]] = await pool.query('SELECT id FROM orders WHERE mercadopago_preference_id = ? LIMIT 1', [prefId]);
+            if (o?.id) await sendOrderEmails(o.id);
+          } catch (_) { /* ignore */ }
+        }
+      }
+    } catch (mailErr) {
+      console.warn('[MP webhook] error enviando correos:', mailErr?.message || String(mailErr));
     }
 
     return res.sendStatus(200);
@@ -292,6 +334,10 @@ router.get('/status/:orderId', async (req, res) => {
       else status = moPayments.length ? 'PROCESSING' : 'NOT_FOUND';
       if (moPayments.length > 0 && !payment) payment = moPayments[0];
     }
+    // Enviar correos si se completó
+    if (status === 'COMPLETED') {
+      try { await sendOrderEmails(orderId); } catch (mailErr) { console.warn('[MP status] error enviando correos:', mailErr?.message || String(mailErr)); }
+    }
 
     let dbUpdated = false;
     let dbError = null;
@@ -302,6 +348,16 @@ router.get('/status/:orderId', async (req, res) => {
 
         const sets = ['payment_status = ?', 'updated_at = NOW()'];
         const params = ['COMPLETED'];
+        // Determinar si debemos cambiar el estado de la orden según item_type
+        let desiredOrderStatus = null;
+        try {
+          const [[o]] = await pool.query('SELECT item_type FROM orders WHERE id = ? LIMIT 1', [orderId]);
+          const itemType = (o?.item_type || '').toUpperCase();
+          if (itemType === 'SERVICE') {
+            desiredOrderStatus = 'IN_PROGRESS';
+          }
+        } catch (_) { /* ignore */ }
+        if (desiredOrderStatus) { sets.push('status = ?'); params.push(desiredOrderStatus); }
         if (mpId) { sets.push('mercadopago_payment_id = ?'); params.push(mpId); }
         if (prefId) { sets.push('mercadopago_preference_id = ?'); params.push(prefId); }
         params.push(orderId);

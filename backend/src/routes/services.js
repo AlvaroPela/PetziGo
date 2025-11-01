@@ -43,7 +43,9 @@ const serviceValidation = [
   body('description')
     .trim()
     .notEmpty()
-    .withMessage('La descripción es requerida'),
+    .withMessage('La descripción es requerida')
+    .isLength({ min: 100 })
+    .withMessage('La descripción debe tener al menos 100 caracteres'),
   body('price')
     .isFloat({ min: 0 })
     .withMessage('El precio debe ser mayor o igual a 0'),

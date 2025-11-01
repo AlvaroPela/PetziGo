@@ -72,7 +72,8 @@ const ProviderDashboard = () => {
   // Pendientes según reglas solicitadas (separados por tipo)
   const servicePending = useMemo(() => {
     const up = (s) => (s||'').toUpperCase();
-    return orders.filter(o => up(o.itemType) === 'SERVICE' && ['CREATED','PENDING'].includes(up(o.status)));
+    // Mostrar sólo PENDING (solicitudes por aprobar), nunca CREATED
+    return orders.filter(o => up(o.itemType) === 'SERVICE' && up(o.status) === 'PENDING');
   }, [orders]);
   const productPending = useMemo(() => {
     const up = (s) => (s||'').toUpperCase();
@@ -268,9 +269,13 @@ const ProviderDashboard = () => {
                           <td className="px-3 py-2 text-sm text-slate-600">{(o.serviceDate ? new Date(o.serviceDate).toLocaleString() : (o.requestedAt ? new Date(o.requestedAt).toLocaleString() : '—'))}</td>
                           <td className="px-3 py-2 text-[11px] text-emerald-700">{(o.status||'').toUpperCase()}</td>
                           <td className="px-3 py-2 text-right">
-                            {((o.status||'').toUpperCase() === 'COMPLETED') ? (
+                            {((o.status||'').toUpperCase() === 'COMPLETED') && (
                               <span className="inline-block text-xs px-2 py-1 rounded bg-emerald-50 text-emerald-700">Completado</span>
-                            ) : (
+                            )}
+                            {((o.status||'').toUpperCase() === 'ACCEPTED') && ((o.paymentStatus||'').toUpperCase() !== 'COMPLETED') && (
+                              <span className="inline-block text-xs px-2 py-1 rounded bg-amber-50 text-amber-700">Pendiente de pago</span>
+                            )}
+                            {((o.status||'').toUpperCase() === 'IN_PROGRESS') && (
                               <button onClick={() => patchOrderStatus(o.id, 'COMPLETED')} className="text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100">Finalizar servicio</button>
                             )}
                           </td>

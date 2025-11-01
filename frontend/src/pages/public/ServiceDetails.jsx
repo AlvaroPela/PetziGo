@@ -3,10 +3,12 @@ import { Button } from '../../components/FormComponents';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, assetUrl } from '../../lib/api';
 import Modal from '../../components/Modal';
+import { useAuth } from '../../auth/AuthProvider';
 
 const ServiceDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [service, setService] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -37,7 +39,14 @@ const ServiceDetails = () => {
     return () => { cancelled = true; };
   }, [id]);
 
+  const [showRoleModal, setShowRoleModal] = useState(false);
+
   const handleReserve = () => {
+    // Si el usuario autenticado es PROVIDER, mostrar modal indicándole crear cuenta de CLIENT
+    if (user && user.role === 'PROVIDER') {
+      setShowRoleModal(true);
+      return;
+    }
     // Redirigir a ruta de reserva/checkout. Si no existe, lleva a una página placeholder.
     navigate(`/services/${id}/book`);
   };
@@ -198,6 +207,16 @@ const ServiceDetails = () => {
             ) : (
               <div className="text-slate-500 text-sm">Sin imagen</div>
             )}
+          </div>
+        </Modal>
+        <Modal isOpen={showRoleModal} onClose={() => setShowRoleModal(false)} ariaLabel="Solo clientes pueden reservar">
+          <div className="text-center">
+            <h2 className="text-xl font-semibold mb-2">Solo clientes pueden reservar</h2>
+            <p className="text-sm text-slate-600 mb-4">Los proveedores no pueden reservar ni comprar desde su cuenta. Por favor crea una cuenta como Cliente para continuar.</p>
+            <div className="flex justify-center gap-3">
+              <button onClick={() => { setShowRoleModal(false); navigate('/register'); }} className="px-4 py-2 rounded bg-violet-700 text-white">Crear cuenta de cliente</button>
+              <button onClick={() => setShowRoleModal(false)} className="px-4 py-2 rounded bg-gray-200">Cerrar</button>
+            </div>
           </div>
         </Modal>
       </div>

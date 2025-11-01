@@ -22,6 +22,11 @@ const Navbar = () => {
 							<Link to="/services" className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-900">
 								Servicios
 							</Link>
+							{user?.role === 'ADMIN' && (
+								<Link to="/admin" className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-900">
+									Admin
+								</Link>
+							)}
 						</div>
 					</div>
 					<div className="flex items-center">

@@ -108,6 +108,13 @@ const ServiceBooking = () => {
 				return;
 			}
 
+			// Validar dirección (requerida y mínimo 5 caracteres)
+			if (!address || (address || '').trim().length < 10) {
+				setError('La dirección es obligatoria y debe tener al menos 10 caracteres');
+				setSubmitting(false);
+				return;
+			}
+
 			const body = {
 				itemType: "SERVICE",
 				itemId: Number(id),
@@ -122,59 +129,20 @@ const ServiceBooking = () => {
 
 			// Respuesta esperada: { id: <orderId>, status: 'PENDING' }
 			if (res?.id) {
-				// Crear preferencia de MercadoPago para redirigir al checkout
-						try {
-							// Guardar orden actual para que la página de retorno pueda consultarla
-							try { localStorage.setItem('currentOrderId', String(res.id)); } catch (e) { /* ignore */ }
-							// Guardar un resumen local del pedido para recibo offline
-							try {
-								const summary = {
-									itemType: 'SERVICE',
-									title: service.title || `Reserva #${res.id}`,
-									unit_price: unitPrice,
-									quantity: qty,
-									total: unitPrice * qty
-								};
-								localStorage.setItem(`mp_order_summary_${res.id}`, JSON.stringify(summary));
-							} catch (e) { /* ignore */ }
-							const prefBody = {
-							title: service.title || `Reserva #${res.id}`,
-							quantity: qty,
-							unit_price: unitPrice,
-							external_reference: res.id
-						};
-						const pref = await api("/payments/create-preference", { method: "POST", body: prefBody });
-						// pref debe traer init_point (o sandbox_init_point)
-						const redirectUrl = pref?.init_point || pref?.sandbox_init_point;
-						if (redirectUrl) {
-							// Abrir el checkout en una ventana nueva y mantener la original en espera
-							try {
-								const popup = window.open(redirectUrl, 'mp_checkout', 'width=900,height=700');
-								try {
-									// Guardar referencias para la pantalla de espera
-									window.__mpPopupRef = popup;
-									window.__mpCurrentOrderId = String(res.id);
-									localStorage.setItem(`mp_init_point_${res.id}`, redirectUrl);
-									const deadline = Date.now() + 1 * 60 * 1000; // 5 minutos
-									localStorage.setItem(`mp_wait_deadline_${res.id}`, String(deadline));
-								  } catch (e) { /* ignore */ }
-							} catch (oerr) {
-								window.location.href = redirectUrl;
-								return;
-							}
-							// Navegar la ventana original a la página de espera para que muestre spinner y botón de verificar
-							navigate(`/payments/wait?external_reference=${encodeURIComponent(res.id)}`);
-							return;
-						}
-						// Si no hay redirectUrl, mostrar error y quedarse en la página
-						setError('No se pudo iniciar el pago con MercadoPago. Por favor intenta de nuevo más tarde.');
-						return;
-					} catch (pErr) {
-						// No redirigir; mostrar mensaje amigable al usuario
-						const message = pErr?.message || 'Error al crear la preferencia de pago';
-						setError(`No se pudo iniciar el pago: ${message}`);
-						return;
-					}
+				// Guardar un resumen local del pedido para mostrar en la página de confirmación
+				try {
+				  const summary = {
+					itemType: 'SERVICE',
+					title: service.title || `Reserva #${res.id}`,
+					unit_price: unitPrice,
+					quantity: qty,
+					total: unitPrice * qty
+				  };
+				  localStorage.setItem(`order_summary_${res.id}`, JSON.stringify(summary));
+				} catch {}
+				// Redirigir a página de confirmación de solicitud (pendiente de aceptación del proveedor)
+				navigate(`/services/${id}/booked?orderId=${encodeURIComponent(res.id)}`);
+				return;
 			} else {
 				setError("Reserva creada pero sin id de pedido en la respuesta");
 			}
@@ -238,8 +206,12 @@ const ServiceBooking = () => {
 											]
 									}
 								/>
-								<Textarea label="Notas (opcional)" value={notes} onChange={setNotes} rows={3} />
-								<Input label="Dirección del servicio (opcional)" value={address} onChange={setAddress} className="w-full" />
+																<Textarea label="Notas (opcional)" value={notes} onChange={setNotes} rows={3} />
+																<div>
+																	<label className="block text-sm font-medium">Dirección del servicio</label>
+																	<Input placeholder="Calle, barrio y número" value={address} onChange={setAddress} className="w-full" />
+																	  <div className="mt-1 text-xs text-slate-500">Actualmente tiene {(address || '').trim().length} caracteres. Mínimo requerido: 10</div>
+																</div>
 							</div>
 						</div>
 

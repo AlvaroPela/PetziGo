@@ -40,6 +40,7 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 		if (!title.trim()) return setError("El título es obligatorio");
 		if (!category) return setError("Seleccione una categoría");
 		if (!price || Number.isNaN(Number(price))) return setError("Precio inválido");
+		if (!description || description.trim().length < 100) return setError('La descripción es obligatoria y debe tener al menos 100 caracteres');
 
 		setLoading(true);
 		try {
@@ -135,6 +136,7 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 			<div>
 				<label className="block text-sm font-medium">Descripción</label>
 				<Textarea value={description} onChange={setDescription} rows={3} placeholder="Describe el servicio" />
+				<div className="mt-1 text-xs text-slate-500">Actualmente tiene {(description || '').trim().length} caracteres. Mínimo requerido: 100</div>
 			</div>
 
 			<div>

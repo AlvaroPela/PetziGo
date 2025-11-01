@@ -11,12 +11,13 @@ import LandingPage from "./pages/public/LandingPage";
 import SearchPage from "./pages/public/SearchPage";
 import ServiceDetails from "./pages/public/ServiceDetails";
 import ServiceBooking from "./pages/public/ServiceBooking";
+import ServiceBooked from "./pages/public/ServiceBooked";
 import PaymentsResult from "./pages/public/PaymentsResult";
 import PaymentsWaiting from "./pages/public/PaymentsWaiting";
 import ProductDetails from "./pages/public/ProductDetails";
 import ProductPurchase from "./pages/public/ProductPurchase";
 import LoginScreen from "./components/LoginScreen";
-import ServicesPage from "./pages/public/ServicesPage";
+import ServicesPage from "./pages/public/ServicesPageClean";
 import RegisterPage from "./pages/auth/Register";
 
 // Client Pages
@@ -61,6 +62,7 @@ export function App() {
 
 					<Route path="services/:id" element={<ServiceDetails />} />
 					<Route path="services/:id/book" element={<ServiceBooking />} />
+					<Route path="services/:id/booked" element={<ServiceBooked />} />
 					<Route path="payments/wait" element={<PaymentsWaiting />} />
 					<Route path="payments/success" element={<PaymentsResult />} />
 					<Route path="products/:id" element={<ProductDetails />} />

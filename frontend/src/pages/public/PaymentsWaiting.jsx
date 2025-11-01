@@ -102,6 +102,18 @@ const PaymentsWaiting = () => {
       if (!orderId || timeoutHandled) return;
       setTimeoutHandled(true);
       try {
+        // Hacer una última verificación ANTES de cancelar
+        const res = await api(`/payments/status/${encodeURIComponent(orderId)}`);
+        setInfo(res);
+        setStatus(res.status || 'AWAITING_PAYMENT');
+        try { localStorage.setItem(`mp_payment_result_${orderId}`, JSON.stringify(res)); } catch (e) { /* ignore */ }
+        if ((res.status || '').toUpperCase() === 'COMPLETED') {
+          // Ya quedó pagado, no cancelar. Mostramos recibo breve y redirigimos al panel.
+          alert('Pago confirmado. Tu orden fue actualizada.');
+          navigate('/client');
+          return;
+        }
+        // Si no quedó pagado, cancelamos de forma determinística
         await api(`/payments/timeout-cancel/${encodeURIComponent(orderId)}`, { method: 'POST' });
       } catch (e) { /* ignore */ }
       alert('El tiempo de pago expiró. La orden fue cancelada.');

@@ -210,120 +210,106 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      <div className="mb-4 p-4 border rounded-2xl bg-white">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold">Filtros</h2>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500 hidden md:inline">{sortedProducts.length} resultados</span>
-            <Select label="Ordenar" value={sortBy} onChange={(v) => { setSortBy(v); setPage(1); }} options={SORT_OPTIONS} />
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
+      <div className="grid md:grid-cols-4 gap-6">
+        <aside className="md:col-span-1">
+          <div className="p-4 border rounded bg-white space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold">Filtros</h2>
+              <span className="text-sm text-gray-500 hidden md:inline">{sortedProducts.length} resultados</span>
+            </div>
             <Select label="Categoría" value={category} onChange={setCategory} options={CATEGORY_OPTIONS} />
-          </div>
-
-          <div>
             <Input label="Precio mínimo" type="number" min="0" step="0.01" value={minPrice} onChange={setMinPrice} placeholder="0" />
-          </div>
-
-          <div>
             <Input label="Precio máximo" type="number" min="0" step="0.01" value={maxPrice} onChange={setMaxPrice} placeholder="∞" />
-          </div>
-
-          <div>
             <Input label="Buscar" value={search} onChange={setSearch} placeholder="palabra clave en nombre o descripción" />
-          </div>
-
-          <div>
             <Input label="Provider ID (opcional)" value={providerId} onChange={setProviderId} placeholder="id del proveedor" />
+            <Select label="Ordenar" value={sortBy} onChange={(v) => { setSortBy(v); setPage(1); }} options={SORT_OPTIONS} />
+            {filterError && <p className="text-red-600 mt-2">{filterError}</p>}
+            <div className="flex gap-2">
+              <Button onClick={() => { setPage(1); loadWithFilters(); }} disabled={loading}>Aplicar filtros</Button>
+              <Button onClick={() => { setCategory(''); setMinPrice(''); setMaxPrice(''); setSearch(''); setProviderId(''); setFilterError(null); setSortBy('relevance'); setPage(1); (async () => { setLoading(true); try { const res = await api('/products'); setProducts(Array.isArray(res.products) ? res.products : res.products || []); } catch (e) { setError(e.message || 'Error'); } finally { setLoading(false); } })(); }} variant="outline" disabled={loading}>Resetear</Button>
+            </div>
           </div>
-        </div>
+        </aside>
 
-        {filterError && <p className="text-red-600 mt-2">{filterError}</p>}
-
-        <div className="mt-3 flex items-center gap-2">
-          <Button onClick={() => { setPage(1); loadWithFilters(); }} disabled={loading}>Aplicar filtros</Button>
-          <Button onClick={() => { setCategory(''); setMinPrice(''); setMaxPrice(''); setSearch(''); setProviderId(''); setFilterError(null); setSortBy('relevance'); setPage(1); (async () => { setLoading(true); try { const res = await api('/products'); setProducts(Array.isArray(res.products) ? res.products : res.products || []); } catch (e) { setError(e.message || 'Error'); } finally { setLoading(false); } })(); }} variant="outline" disabled={loading}>Resetear</Button>
-        </div>
-      </div>
-
-      {loading && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="rounded-lg border p-4 bg-white animate-pulse">
-              <div className="h-4 bg-gray-200 rounded w-1/2 mb-2" />
-              <div className="h-3 bg-gray-100 rounded w-3/4 mb-4" />
-              <div className="h-40 bg-gray-100 rounded mb-4" />
-              <div className="h-4 bg-gray-200 rounded w-1/3" />
+        <main className="md:col-span-3">
+          {loading && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="rounded-lg border p-4 bg-white animate-pulse">
+                  <div className="h-4 bg-gray-200 rounded w-1/2 mb-2" />
+                  <div className="h-3 bg-gray-100 rounded w-3/4 mb-4" />
+                  <div className="h-40 bg-gray-100 rounded mb-4" />
+                  <div className="h-4 bg-gray-200 rounded w-1/3" />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
-      {error && <p className="text-red-600">{error}</p>}
+          )}
+          {error && <p className="text-red-600">{error}</p>}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {visible.map((p) => (
-          <div key={p.id} className="rounded-lg border p-4 bg-white">
-            <div className="flex items-start justify-between">
-              <h3 className="font-semibold text-lg line-clamp-1">{p.name}</h3>
-              <span className="ml-2 inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-200">{p.category}</span>
-            </div>
-            <div
-              className="mt-2 h-36 w-full overflow-hidden rounded bg-slate-50 flex items-center justify-center relative"
-              onClick={() => { if (p.image_url) setImgModal({ open: true, src: assetUrl(p.image_url), alt: p.name }); }}
-              role={p.image_url ? 'button' : undefined}
-              aria-label={p.image_url ? 'Abrir imagen' : undefined}
-              style={{ cursor: p.image_url ? 'zoom-in' : 'default' }}
-            >
-              {p.image_url ? (
-                <>
-                  <img src={assetUrl(p.image_url)} alt={p.name} className="h-full w-full object-cover" />
-                  <div className="absolute bottom-1 right-1 rounded bg-black/55 text-white text-[10px] px-1.5 py-0.5 pointer-events-none select-none">
-                    Haz clic para ampliar
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {visible.map((p) => (
+              <div key={p.id} className="rounded-lg border p-4 bg-white">
+                <div className="flex items-start justify-between">
+                  <h3 className="font-semibold text-lg line-clamp-1">{p.name}</h3>
+                  <span className="ml-2 inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-200">{p.category}</span>
+                </div>
+                <div
+                  className="mt-2 h-36 w-full overflow-hidden rounded bg-slate-50 flex items-center justify-center relative"
+                  onClick={() => { if (p.image_url) setImgModal({ open: true, src: assetUrl(p.image_url), alt: p.name }); }}
+                  role={p.image_url ? 'button' : undefined}
+                  aria-label={p.image_url ? 'Abrir imagen' : undefined}
+                  style={{ cursor: p.image_url ? 'zoom-in' : 'default' }}
+                >
+                  {p.image_url ? (
+                    <>
+                      <img src={assetUrl(p.image_url)} alt={p.name} className="h-full w-full object-cover" />
+                      <div className="absolute bottom-1 right-1 rounded bg-black/55 text-white text-[10px] px-1.5 py-0.5 pointer-events-none select-none">
+                        Haz clic para ampliar
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-xs text-slate-500">Sin imagen</div>
+                  )}
+                </div>
+                <p className="mt-2 text-sm text-gray-600 line-clamp-2">{p.description}</p>
+                <div className="mt-3 flex items-center justify-between">
+                  <div className="text-sm text-gray-500">
+                    <div className="font-medium text-gray-700">{p.provider_name}</div>
+                    <RatingStars value={p.average_rating} />
                   </div>
-                </>
-              ) : (
-                <div className="text-xs text-slate-500">Sin imagen</div>
-              )}
-            </div>
-            <p className="mt-2 text-sm text-gray-600 line-clamp-2">{p.description}</p>
-            <div className="mt-3 flex items-center justify-between">
-              <div className="text-sm text-gray-500">
-                <div className="font-medium text-gray-700">{p.provider_name}</div>
-                <RatingStars value={p.average_rating} />
+                  <div className="text-right">
+                    <div className="text-lg font-semibold text-petzi">{formatCurrency(p.price)}</div>
+                    {typeof p.stock === 'number' && (
+                      <div className="text-xs text-gray-500">Stock: {p.stock}</div>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Link to={`/products/${p.id}`} className="inline-flex items-center gap-1 rounded px-3 py-1.5 text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50 text-sm">Ver</Link>
+                    {auth.user && auth.user.role === 'CLIENT' && <Link to={`/products/${p.id}/buy`} className="inline-flex items-center gap-1 rounded px-3 py-1.5 text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50 text-sm">Comprar</Link>}
+                    {auth.user && auth.user.role === 'PROVIDER' && (
+                      <>
+                        <button onClick={() => openEdit(p)} className="border border-gray-200 bg-white text-gray-700 px-2 py-1 rounded hover:bg-gray-50 text-sm">Editar</button>
+                        <button onClick={() => deleteProduct(p.id)} className="border border-red-200 bg-white text-red-700 px-2 py-1 rounded hover:bg-red-50 text-sm">Eliminar</button>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="text-right">
-                <div className="text-lg font-semibold text-petzi">{formatCurrency(p.price)}</div>
-                {typeof p.stock === 'number' && (
-                  <div className="text-xs text-gray-500">Stock: {p.stock}</div>
-                )}
-              </div>
-            </div>
-            <div className="mt-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Link to={`/products/${p.id}`} className="inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-violet-800 ring-1 ring-violet-200 hover:bg-violet-50 text-sm">Ver</Link>
-                {auth.user && auth.user.role === 'CLIENT' && <Link to={`/products/${p.id}/buy`} className="inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-emerald-800 ring-1 ring-emerald-200 hover:bg-emerald-50 text-sm">Comprar</Link>}
-                {auth.user && auth.user.role === 'PROVIDER' && (
-                  <>
-                    <Button onClick={() => openEdit(p)} className="!px-3 !py-1.5 !text-sm" variant="soft">Editar</Button>
-                    <Button onClick={() => deleteProduct(p.id)} className="!px-3 !py-1.5 !text-sm" variant="danger">Eliminar</Button>
-                  </>
-                )}
-              </div>
-            </div>
+            ))}
+            {sortedProducts.length === 0 && !loading && <p>No se encontraron productos</p>}
           </div>
-        ))}
-        {sortedProducts.length === 0 && !loading && <p>No se encontraron productos</p>}
-      </div>
 
-      {sortedProducts.length > pageSize && (
-        <div className="mt-6 flex items-center justify-center gap-2">
-          <Button variant="outline" disabled={pageClamped <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Anterior</Button>
-          <span className="text-sm text-gray-600">Página {pageClamped} de {totalPages}</span>
-          <Button variant="outline" disabled={pageClamped >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Siguiente</Button>
-        </div>
-      )}
+          {sortedProducts.length > pageSize && (
+            <div className="mt-6 flex items-center justify-center gap-2">
+              <Button variant="outline" disabled={pageClamped <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Anterior</Button>
+              <span className="text-sm text-gray-600">Página {pageClamped} de {totalPages}</span>
+              <Button variant="outline" disabled={pageClamped >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Siguiente</Button>
+            </div>
+          )}
+        </main>
+      </div>
 
       {/* Modal de imagen ampliada */}
       <Modal isOpen={imgModal.open} onClose={() => setImgModal({ open: false, src: null, alt: '' })} ariaLabel="Imagen del producto">

@@ -50,6 +50,7 @@ export default function ProductForm({ initial = null, onSaved, onCancel }) {
     if (!name.trim()) return setError('El nombre es obligatorio');
     if (!price || Number.isNaN(Number(price))) return setError('Precio inválido');
     if (!category) return setError('Seleccione una categoría');
+  if (!description || description.trim().length < 100) return setError('La descripción es obligatoria y debe tener al menos 100 caracteres');
 
     const payload = {
       name: name.trim(),
@@ -125,7 +126,10 @@ export default function ProductForm({ initial = null, onSaved, onCancel }) {
 
       <Input label="Nombre" value={name} onChange={setName} placeholder="Nombre del producto" />
 
-      <Textarea label="Descripción" value={description} onChange={setDescription} rows={3} placeholder="Describe el producto" />
+      <div>
+        <Textarea label="Descripción" value={description} onChange={setDescription} rows={3} placeholder="Describe el producto" />
+        <div className="mt-1 text-xs text-slate-500">Actualmente tiene {(description || '').trim().length} caracteres. Mínimo requerido: 100</div>
+      </div>
 
       <Select
         label="Categoría"

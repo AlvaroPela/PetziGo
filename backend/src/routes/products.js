@@ -234,7 +234,7 @@ router.get('/:id', [param('id').isInt({ min: 1 })], async (req, res) => {
  */
 const productValidations = [
 	body("name").trim().notEmpty().withMessage("El nombre es obligatorio"),
-	body("description").trim().optional({ checkFalsy: true }),
+	body("description").trim().notEmpty().withMessage('La descripción es requerida').isLength({ min: 100 }).withMessage('La descripción debe tener al menos 100 caracteres'),
 	body("category").trim().notEmpty().withMessage("La categoría es obligatoria"),
 	body("price").isFloat({ min: 0 }).withMessage("El precio debe ser un número positivo"),
 	body("stock").optional().isInt({ min: 0 }).withMessage("El stock debe ser un entero positivo"),

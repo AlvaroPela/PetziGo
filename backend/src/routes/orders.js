@@ -12,7 +12,22 @@ const creationValidations = [
   body('itemId').isInt({ min: 1 }).withMessage('El item es obligatorio'),
   body('quantity').optional().isInt({ min: 1 }).withMessage('La cantidad debe ser un entero positivo'),
   body('notes').optional().isLength({ max: 500 }).withMessage('Las notas no pueden exceder 500 caracteres'),
-  body('address').optional().isLength({ min: 3, max: 255 }).withMessage('La dirección debe tener entre 3 y 255 caracteres'),
+  // Dirección: si es una orden de servicio, es obligatoria y mínimo 5 caracteres; para productos es opcional
+  body('address').custom((val, { req }) => {
+    const itemType = (req.body?.itemType || '').toUpperCase();
+    if (itemType === 'SERVICE') {
+      if (!val || String(val).trim().length < 10) {
+        throw new Error('La dirección es obligatoria para servicios y debe tener al menos 10 caracteres');
+      }
+      if (String(val).length > 255) throw new Error('La dirección debe tener como máximo 255 caracteres');
+      return true;
+    }
+    // Para productos, si se envía validar longitud entre 3 y 255
+    if (val) {
+      if (String(val).trim().length < 3 || String(val).length > 255) throw new Error('La dirección debe tener entre 3 y 255 caracteres');
+    }
+    return true;
+  }),
   // fecha y mascota para reservas de servicios
   body('service_date').optional().isISO8601().withMessage('service_date debe ser una fecha ISO8601'),
   body('petId').optional().isInt({ min: 1 }).withMessage('petId debe ser un entero')
@@ -75,9 +90,10 @@ router.post('/', authRequired('CLIENT'), creationValidations, async (req, res) =
   const totalAmount = unitPrice * qty;
 
   // Insertamos la orden incluyendo campos opcionales de reserva (service_date, pet_id) y total_amount
+  const initialStatus = itemType === 'SERVICE' ? 'PENDING' : 'PENDING';
   const [result] = await pool.query(
     `INSERT INTO orders (user_id, provider_id, item_type, service_id, product_id, quantity, status, notes, address, service_date, pet_id, total_amount)
-     VALUES (?, ?, ?, ?, ?, ?, 'CREATED', ?, ?, ?, ?, ?)` ,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
     [
       req.user.id,
       providerId,
@@ -85,6 +101,7 @@ router.post('/', authRequired('CLIENT'), creationValidations, async (req, res) =
       itemType === 'SERVICE' ? itemId : null,
       itemType === 'PRODUCT' ? itemId : null,
       qty,
+      initialStatus,
       notes || null,
       address || null,
       service_date ? new Date(service_date) : null,
@@ -93,7 +110,7 @@ router.post('/', authRequired('CLIENT'), creationValidations, async (req, res) =
     ]
   );
 
-  res.status(201).json({ id: result.insertId, status: 'PENDING', totalAmount });
+  res.status(201).json({ id: result.insertId, status: initialStatus, paymentStatus: 'PENDING', totalAmount });
 });
 
 const filterValidations = [

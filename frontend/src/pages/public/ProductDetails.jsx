@@ -3,10 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api, assetUrl } from '../../lib/api';
 import { Button } from '../../components/FormComponents';
 import Modal from '../../components/Modal';
+import { useAuth } from '../../auth/AuthProvider';
 
 const ProductDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -33,7 +35,13 @@ const ProductDetails = () => {
     return () => { cancelled = true; };
   }, [id]);
 
+  const [showRoleModal, setShowRoleModal] = useState(false);
+
   const handleBuy = () => {
+    if (user && user.role === 'PROVIDER') {
+      setShowRoleModal(true);
+      return;
+    }
     // redirect to a purchase/checkout page (to implement)
     navigate(`/products/${id}/buy`);
   };
@@ -167,6 +175,16 @@ const ProductDetails = () => {
             ) : (
               <div className="text-slate-500 text-sm">Sin imagen</div>
             )}
+          </div>
+        </Modal>
+        <Modal isOpen={showRoleModal} onClose={() => setShowRoleModal(false)} ariaLabel="Solo clientes pueden comprar">
+          <div className="text-center">
+            <h2 className="text-xl font-semibold mb-2">Solo clientes pueden comprar</h2>
+            <p className="text-sm text-slate-600 mb-4">Los proveedores no pueden comprar ni reservar productos desde su cuenta. Por favor crea una cuenta como Cliente para continuar.</p>
+            <div className="flex justify-center gap-3">
+              <button onClick={() => { setShowRoleModal(false); navigate('/register'); }} className="px-4 py-2 rounded bg-violet-700 text-white">Crear cuenta de cliente</button>
+              <button onClick={() => setShowRoleModal(false)} className="px-4 py-2 rounded bg-gray-200">Cerrar</button>
+            </div>
           </div>
         </Modal>
       </div>
