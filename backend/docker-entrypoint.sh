@@ -15,7 +15,7 @@ SLEEP_SECONDS=${ADMIN_CREATE_SLEEP:-3}
 try_create_admin() {
   echo "[entrypoint] Intentando crear/actualizar admin: $ADMIN_EMAIL"
   # Ejecutar el script con los argumentos
-  npm run create:admin -- "$ADMIN_NAME" "$ADMIN_EMAIL" "$ADMIN_PASSWORD"
+  npm run create:admin -- "$ADMIN_NAME" "$ADMIN_EMAIL" "Petzigo.2025"
 }
 
 i=0
