@@ -2,6 +2,37 @@ import React, { useState, useEffect, useRef } from "react";
 import { api, assetUrl } from "../lib/api";
 import { Input, Select, Textarea, Button } from "./FormComponents";
 import { useAuth } from "../auth/AuthProvider";
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+
+function MapClickHandler({ setLocation, setCity, setGeoLoading }) {
+	useMapEvents({
+		async click(e) {
+			const { lat, lng } = e.latlng || {};
+			if (lat && lng) {
+				setLocation({ lat, lng });
+				if (setGeoLoading) setGeoLoading(true);
+				try {
+					const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=es`;
+					const resp = await fetch(url);
+					if (resp.ok) {
+						const data = await resp.json();
+						const addr = data.address || {};
+						const found = addr.city || addr.town || addr.village || addr.county || addr.state || '';
+						if (found && setCity) setCity(found);
+					} else {
+						console.warn('Nominatim returned non-ok', resp.status);
+					}
+				} catch (err) {
+					console.warn('Reverse geocode error:', err);
+				} finally {
+					if (setGeoLoading) setGeoLoading(false);
+				}
+			}
+		}
+	});
+	return null;
+}
 
 export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 	const [title, setTitle] = useState(initial?.title || "");
@@ -14,6 +45,9 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 	const [errors, setErrors] = useState([]);
 	const [imageFile, setImageFile] = useState(null);
 	const [previewUrl, setPreviewUrl] = useState(initial?.image_url || initial?.imageUrl || null);
+	const [location, setLocation] = useState({ lat: initial?.location_lat || null, lng: initial?.location_lng || null });
+	const [city, setCity] = useState(initial?.city || '');
+	const [geoLoading, setGeoLoading] = useState(false);
 	const firstInput = useRef(null);
 	const {user} = useAuth();
 
@@ -24,6 +58,8 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 		setCategory(initial?.category ?? "");
 		setPrice(initial?.price ?? "");
 		setPreviewUrl(initial?.image_url || initial?.imageUrl || null);
+		setLocation({ lat: initial?.location_lat || null, lng: initial?.location_lng || null });
+		setCity(initial?.city || '');
 		setImageFile(null);
 	}, [initial]);
 
@@ -39,8 +75,11 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 		// validaciones simples
 		if (!title.trim()) return setError("El título es obligatorio");
 		if (!category) return setError("Seleccione una categoría");
-		if (!price || Number.isNaN(Number(price))) return setError("Precio inválido");
+		if (!price || Number.isNaN(Number(price)) || Number(price) <= 0) return setError("Precio inválido: debe ser mayor a 0");
 		if (!description || description.trim().length < 100) return setError('La descripción es obligatoria y debe tener al menos 100 caracteres');
+
+		// Validar ubicación: obligatoria al crear servicio
+		if (!location || location.lat == null || location.lng == null) return setError('La ubicación del servicio es obligatoria. Selecciona un punto en el mapa.');
 
 		setLoading(true);
 		try {
@@ -49,7 +88,10 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 				description: description.trim(),
 				category: category.trim(),
 				price: Number(price),
-				userId: user.id
+				userId: user.id,
+				location_lat: Number(location.lat),
+				location_lng: Number(location.lng),
+				city: city || null
 			};
 
 			let saved;
@@ -117,26 +159,63 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 		<form onSubmit={handleSubmit} className="space-y-4">
 			<h2 className="text-xl font-semibold">{initial?.id ? "Editar servicio" : "Nuevo servicio"}</h2>
 
-			{error && <div className="text-sm text-red-600">{error}</div>}
-			{errors.length > 0 && (
-				<div className="text-sm text-red-600">
-					<ul className="list-disc list-inside">
-						{errors.map((err, idx) => (
-							<li key={idx}>{err.msg}</li>
-						))}
-					</ul>
-				</div>
-			)}
+
 
 			<div>
 				<label className="block text-sm font-medium">Título</label>
 				<Input type="text" ref={firstInput} value={title} onChange={setTitle} placeholder="Corte de pelo, paseo, consulta vets..." />
 			</div>
 
+				<div>
+					<label className="block text-sm font-medium">Ubicación del servicio</label>
+					<div className="mt-2 text-sm text-slate-600">Selecciona en el mapa la ubicación exacta donde prestas este servicio. Obligatorio.</div>
+					<div className="mt-3 rounded border overflow-hidden" style={{ height: 260 }}>
+						{ /* Mapa interactivo */ }
+						<MapContainer center={location.lat && location.lng ? [Number(location.lat), Number(location.lng)] : [6.2442, -75.5812]} zoom={13} style={{ height: '100%', width: '100%' }}>
+							<TileLayer
+								url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+								attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+							/>
+							{location.lat && location.lng && (
+								<Marker position={[Number(location.lat), Number(location.lng)]} />
+							)}
+							{
+								// componente para capturar clicks y colocar marcador (también intenta obtener la ciudad)
+							}
+							<MapClickHandler setLocation={setLocation} setCity={setCity} setGeoLoading={setGeoLoading} />
+						</MapContainer>
+					</div>
+					<div className="mt-2 flex items-center gap-3">
+						<div className="text-xs text-slate-600">Coordenadas:</div>
+						<div className="text-sm font-mono">{location.lat ? Number(location.lat).toFixed(6) : '—'} , {location.lng ? Number(location.lng).toFixed(6) : '—'}</div>
+					</div>
+					<div className="mt-2">
+						<label className="block text-sm font-medium">Ciudad (opcional)</label>
+											<div className="relative">
+												<Input
+													value={city}
+													onChange={setCity}
+													placeholder="Ciudad"
+													className={geoLoading ? 'pr-10 border-violet-200/70 ring-1 ring-violet-50' : ''}
+												/>
+												{geoLoading && (
+													<div className="absolute inset-y-0 right-2 flex items-center pointer-events-none">
+														<svg className="h-4 w-4 text-violet-600 animate-spin" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+															<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+															<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+														</svg>
+													</div>
+												)}
+											</div>
+
+					</div>
+				</div>
+
 			<div>
 				<label className="block text-sm font-medium">Descripción</label>
-				<Textarea value={description} onChange={setDescription} rows={3} placeholder="Describe el servicio" />
-				<div className="mt-1 text-xs text-slate-500">Actualmente tiene {(description || '').trim().length} caracteres. Mínimo requerido: 100</div>
+				{/* Mostrar error/estilo rojo si la descripción es demasiado corta */}
+				<Textarea value={description} onChange={setDescription} rows={3} placeholder="Describe el servicio" error={(description || '').trim().length > 0 && (description || '').trim().length < 100 ? 'La descripción debe tener al menos 100 caracteres' : undefined} />
+				<div className={`mt-1 text-xs ${((description || '').trim().length > 0 && (description || '').trim().length < 100) ? 'text-rose-600' : 'text-slate-500'}`}>Actualmente tiene {(description || '').trim().length} caracteres. Mínimo requerido: 100</div>
 			</div>
 
 			<div>
@@ -158,7 +237,7 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 
 			<div>
 				<label className="block text-sm font-medium">Precio</label>
-				<Input value={price} onChange={setPrice} inputMode="numeric" placeholder="0.00" />
+				<Input value={price} onChange={setPrice} inputMode="numeric" placeholder="0.00" min="0.01" step="0.01" />
 			</div>
 
 			<div>
@@ -193,6 +272,18 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 					)}
 				</div>
 			</div>
+
+			{/* Mostrar errores de validación justo antes de los botones (requerimiento UX) */}
+			{error && <div className="text-sm text-red-600">{error}</div>}
+			{errors.length > 0 && (
+				<div className="text-sm text-red-600">
+					<ul className="list-disc list-inside">
+						{errors.map((err, idx) => (
+							<li key={idx}>{err.msg}</li>
+						))}
+					</ul>
+				</div>
+			)}
 
 			<div className="flex items-center justify-end gap-2">
 				<Button type="button" variant="outline" onClick={onCancel}>

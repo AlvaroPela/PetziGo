@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { body, query, validationResult } from 'express-validator';
 import { pool } from '../config/db.js';
+import jwt from 'jsonwebtoken';
 import { requireAuth, requireRole, requireVerifiedProvider, requireResourceOwnership } from '../middleware/auth.js';
 import multer from 'multer';
 import path from 'path';
@@ -69,7 +70,39 @@ router.get('/', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { category, min_price, max_price, rating, search, provider_id } = req.query;
+    const { category, min_price, max_price, rating, search, provider_id, idp } = req.query;
+
+    // Owner-fastpath: si el frontend indica que es petición del proveedor mediante `idp=<id>`
+    // intentamos verificar el token y devolver sólo los servicios de ese proveedor (sin aplicar filtros públicos).
+    // Si no coincide el token o hay error, continuamos con la lógica pública.
+    if (idp) {
+      try {
+        const token = req.headers.authorization?.split(' ')[1];
+        if (token) {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          const [[requester]] = await pool.query(
+            `SELECT u.id, u.role, u.status FROM users u WHERE u.id = ?`,
+            [decoded.id]
+          );
+          if (requester && requester.role === 'PROVIDER' && String(requester.id) === String(idp)) {
+            const [services] = await pool.query(
+              `SELECT s.*, u.name AS provider_name, u.email AS provider_email, s.location_lat, s.location_lng, s.city
+               FROM services s
+               INNER JOIN users u ON s.provider_id = u.id
+               WHERE s.provider_id = ?
+               ORDER BY s.created_at DESC`,
+              [idp]
+            );
+
+            console.log('[services] owner request via idp - returning', Array.isArray(services) ? services.length : 0, 'services for provider', idp);
+            return res.json({ services });
+          }
+        }
+      } catch (err) {
+        console.warn('[services] could not verify token for owner-fastpath (idp):', err && err.message);
+        // continuar con la lógica pública en caso de error de verificación
+      }
+    }
     // PENDIENTE para cuando se implemnte la activacion y desactivacions del provedor
     // let query = `
     //   SELECT s.*, u.name as provider_name, 
@@ -87,15 +120,15 @@ router.get('/', [
              u.email AS provider_email,
              pp.verified AS provider_verified,
              pp.average_rating, pp.total_reviews,
-             pp.location_lat, pp.location_lng
+             s.location_lat, s.location_lng, s.city
       FROM services s
       INNER JOIN users u ON s.provider_id = u.id
       INNER JOIN provider_profiles pp ON s.provider_id = pp.user_id
       WHERE s.active = 1
         AND u.status = 'ACTIVE'
         AND pp.verified = 1
-        AND pp.location_lat IS NOT NULL
-        AND pp.location_lng IS NOT NULL
+        AND s.location_lat IS NOT NULL
+        AND s.location_lng IS NOT NULL
     `;
 
     const values = [];
@@ -167,7 +200,7 @@ router.get('/:id', async (req, res) => {
     const [[service]] = await pool.query(
       `SELECT s.*, u.name as provider_name,
               pp.business_description, pp.average_rating, pp.total_reviews,
-              pp.location_lat, pp.location_lng
+              s.location_lat, s.location_lng, s.city
        FROM services s
        INNER JOIN users u ON s.provider_id = u.id
        INNER JOIN provider_profiles pp ON s.provider_id = pp.user_id
@@ -213,7 +246,7 @@ router.post('/', requireAuth, requireRole(['PROVIDER']), requireVerifiedProvider
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { title, description, price, category } = req.body;
+  const { title, description, price, category, location_lat, location_lng, city } = req.body;
 
     // Si es un servicio de paseo (PASEO), exigir ubicación base del proveedor
     if (category === 'PASEO') {
@@ -223,14 +256,31 @@ router.post('/', requireAuth, requireRole(['PROVIDER']), requireVerifiedProvider
       }
     }
 
+    // Validar que la ubicación del servicio esté presente
+    if (location_lat == null || location_lng == null) {
+      return res.status(400).json({ message: 'La ubicación del servicio (latitud y longitud) es obligatoria.' });
+    }
+
     const [result] = await pool.query(
-      `INSERT INTO services (provider_id, title, description, price, category)
-       VALUES (?, ?, ?, ?, ?)`,
-      [req.user.id, title, description, price, category]
+      `INSERT INTO services (provider_id, title, description, price, category, location_lat, location_lng, city)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.user.id, title, description, price, category, location_lat, location_lng, city || null]
     );
 
-    console.log('[services] created id:', result.insertId);
-    res.status(201).json({ message: 'Servicio creado exitosamente', service: { id: result.insertId, title, description, price, category } });
+    const insertId = result.insertId;
+    console.log('[services] created id:', insertId);
+
+    // Recuperar el servicio completo para devolver al cliente (incluye location, image_url, provider info)
+    const [[created]] = await pool.query(
+      `SELECT s.*, u.name as provider_name, pp.business_description, pp.average_rating, pp.total_reviews
+       FROM services s
+       INNER JOIN users u ON s.provider_id = u.id
+       LEFT JOIN provider_profiles pp ON s.provider_id = pp.user_id
+       WHERE s.id = ?`,
+      [insertId]
+    );
+
+    res.status(201).json({ message: 'Servicio creado exitosamente', service: created || { id: insertId, title, description, price, category } });
 
   } catch (err) {
     console.error('Error al crear servicio:', err);
@@ -249,18 +299,29 @@ router.put('/:id', requireAuth, requireResourceOwnership('service'), serviceVali
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { title, description, price, category } = req.body;
+    const { title, description, price, category, location_lat, location_lng, city } = req.body;
     const serviceId = req.params.id;
 
     await pool.query(
       `UPDATE services
-       SET title = ?, description = ?, price = ?, category = ?
+       SET title = ?, description = ?, price = ?, category = ?, location_lat = ?, location_lng = ?, city = ?
        WHERE id = ?`,
-      [title, description, price, category, serviceId]
+      [title, description, price, category, location_lat || null, location_lng || null, city || null, serviceId]
     );
 
     console.log('[services] updated id:', serviceId);
-    res.json({ message: 'Servicio actualizado exitosamente', service: { id: serviceId, title, description, price, category } });
+
+    // Recuperar fila actualizada para devolverla completa al frontend
+    const [[updated]] = await pool.query(
+      `SELECT s.*, u.name as provider_name, pp.business_description, pp.average_rating, pp.total_reviews
+       FROM services s
+       INNER JOIN users u ON s.provider_id = u.id
+       LEFT JOIN provider_profiles pp ON s.provider_id = pp.user_id
+       WHERE s.id = ?`,
+      [serviceId]
+    );
+
+    res.json({ message: 'Servicio actualizado exitosamente', service: updated || { id: serviceId, title, description, price, category } });
 
   } catch (err) {
     console.error('Error al actualizar servicio:', err);

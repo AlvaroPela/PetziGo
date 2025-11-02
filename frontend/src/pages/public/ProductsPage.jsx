@@ -43,6 +43,8 @@ export default function ProductsPage() {
   const pageSize = 12;
   // Modal imagen ampliada
   const [imgModal, setImgModal] = useState({ open: false, src: null, alt: '' });
+  // Modal cliente (si existe información de cliente asociada)
+  const [clientModal, setClientModal] = useState({ open: false, data: null });
 
   const auth = useAuth();
   const navigate = useNavigate();
@@ -54,7 +56,12 @@ export default function ProductsPage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await api('/products');
+        // si el usuario autenticado es PROVIDER, indicamos idp para owner-fastpath
+        let path = '/products';
+        if (auth && auth.user && auth.user.role === 'PROVIDER' && auth.user.id) {
+          path = `/products?idp=${encodeURIComponent(String(auth.user.id))}`;
+        }
+        const res = await api(path);
         if (!mounted) return;
         setProducts(Array.isArray(res.products) ? res.products : res.products || []);
       } catch (err) {
@@ -82,6 +89,10 @@ export default function ProductsPage() {
     if (max !== null) params.append('max_price', String(max));
     if (search) params.append('search', search);
     if (providerId) params.append('provider_id', providerId);
+    else if (auth && auth.user && auth.user.role === 'PROVIDER' && auth.user.id) {
+      // si no se filtró por otro provider pero el usuario es provider, pedir owner-fastpath
+      params.append('idp', String(auth.user.id));
+    }
 
     const path = params.toString() ? `/products?${params.toString()}` : '/products';
 
@@ -267,9 +278,14 @@ export default function ProductsPage() {
                         Haz clic para ampliar
                       </div>
                     </>
-                  ) : (
-                    <div className="text-xs text-slate-500">Sin imagen</div>
-                  )}
+                          ) : (
+                            <div className="flex flex-col items-center justify-center text-xs text-slate-500">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-violet-400 mb-1" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <path d="M7.5 3C6.1 3 5 4.1 5 5.5S6.1 8 7.5 8 10 6.9 10 5.5 8.9 3 7.5 3zM16.5 3c-1.4 0-2.5 1.1-2.5 2.5S15.1 8 16.5 8 19 6.9 19 5.5 17.9 3 16.5 3zM12 5c-1.3 0-2.4.8-2.9 1.9C9.6 7 10.7 7.8 12 7.8s2.4-.8 2.9-1.9C14.4 5.8 13.3 5 12 5zM4 14c0-2.8 2.2-5 5-5h6c2.8 0 5 2.2 5 5v1c0 2.8-4 5-8 5s-8-2.2-8-5v-1z" />
+                              </svg>
+                              <div className="text-[11px]">Sin imagen</div>
+                            </div>
+                          )}
                 </div>
                 <p className="mt-2 text-sm text-gray-600 line-clamp-2">{p.description}</p>
                 <div className="mt-3 flex items-center justify-between">
@@ -287,7 +303,14 @@ export default function ProductsPage() {
                 <div className="mt-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Link to={`/products/${p.id}`} className="inline-flex items-center gap-1 rounded px-3 py-1.5 text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50 text-sm">Ver</Link>
-                    {auth.user && auth.user.role === 'CLIENT' && <Link to={`/products/${p.id}/buy`} className="inline-flex items-center gap-1 rounded px-3 py-1.5 text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50 text-sm">Comprar</Link>}
+                    {(p.client || p.client_name) && (
+                      <button className="inline-flex items-center gap-1 rounded px-3 py-1.5 text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50 text-sm" onClick={() => setClientModal({ open: true, data: p })}>Cliente</button>
+                    )}
+                    {auth.user && auth.user.role === 'CLIENT' && (
+                      <Link to={`/products/${p.id}/buy`} className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 bg-gradient-to-r from-violet-500 to-violet-400 text-white shadow-sm hover:from-violet-600 hover:to-violet-500 transition text-sm">
+                        Comprar
+                      </Link>
+                    )}
                     {auth.user && auth.user.role === 'PROVIDER' && (
                       <>
                         <button onClick={() => openEdit(p)} className="border border-gray-200 bg-white text-gray-700 px-2 py-1 rounded hover:bg-gray-50 text-sm">Editar</button>
@@ -317,13 +340,54 @@ export default function ProductsPage() {
           {imgModal.src ? (
             <img src={imgModal.src} alt={imgModal.alt} className="max-h-[80vh] w-auto mx-auto rounded" />
           ) : (
-            <div className="text-slate-500 text-sm">Sin imagen</div>
+            <div className="flex flex-col items-center justify-center text-sm text-slate-500">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-violet-400 mb-1" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M7.5 3C6.1 3 5 4.1 5 5.5S6.1 8 7.5 8 10 6.9 10 5.5 8.9 3 7.5 3zM16.5 3c-1.4 0-2.5 1.1-2.5 2.5S15.1 8 16.5 8 19 6.9 19 5.5 17.9 3 16.5 3zM12 5c-1.3 0-2.4.8-2.9 1.9C9.6 7 10.7 7.8 12 7.8s2.4-.8 2.9-1.9C14.4 5.8 13.3 5 12 5zM4 14c0-2.8 2.2-5 5-5h6c2.8 0 5 2.2 5 5v1c0 2.8-4 5-8 5s-8-2.2-8-5v-1z" />
+              </svg>
+              <div>Sin imagen</div>
+            </div>
           )}
         </div>
       </Modal>
 
       <Modal isOpen={open} onClose={() => { setOpen(false); setEditing(null); }} ariaLabel="Formulario producto">
         <ProductForm initial={editing} onSaved={handleSaved} onCancel={() => { setOpen(false); setEditing(null); }} />
+      </Modal>
+
+      {/* Client modal */}
+      <Modal isOpen={clientModal.open} onClose={() => setClientModal({ open: false, data: null })} ariaLabel="Cliente">
+        {(() => {
+          const p = clientModal.data;
+          if (!p) return null;
+          const c = p.client || {};
+          const name = c.name || p.client_name || 'Cliente';
+          const email = c.email || p.client_email;
+          const phone = c.phone || p.client_phone;
+          const avatar = c.avatar || p.client_avatar;
+          return (
+            <div className="max-w-md mx-auto p-4">
+              <div className="bg-white rounded-lg shadow-sm p-4 flex items-start gap-4">
+                <div className="flex-shrink-0">
+                  {avatar ? (
+                    <img src={assetUrl(avatar)} alt={name} className="w-16 h-16 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-violet-50 text-violet-700 flex items-center justify-center text-xl font-semibold">{(name || 'C')[0]}</div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-semibold truncate">{name}</h3>
+                  <div className="text-sm text-gray-600 mt-1 space-y-1">
+                    {email && <div>Email: <a className="text-violet-700 underline" href={`mailto:${email}`}>{email}</a></div>}
+                    {phone && <div>Teléfono: {phone}</div>}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 flex justify-end">
+                <button onClick={() => setClientModal({ open: false, data: null })} className="px-4 py-2 rounded bg-gray-100">Cerrar</button>
+              </div>
+            </div>
+          );
+        })()}
       </Modal>
     </div>
   );

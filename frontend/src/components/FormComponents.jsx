@@ -3,11 +3,12 @@ import React from "react";
 const baseFieldClasses =
 	"mt-1 w-full rounded-2xl border border-slate-300/80 bg-white px-3.5 py-2.5 shadow-sm outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-400 placeholder:text-slate-400";
 
-export function Input({ label, type = "text", value, onChange, placeholder, required, disabled, autoComplete = "new-field", className = "", helperText, error, ...props }) {
+export const Input = React.forwardRef(function Input({ label, type = "text", value, onChange, placeholder, required, disabled, autoComplete = "new-field", className = "", helperText, error, ...props }, ref) {
 	return (
 		<label className="block">
 			{label && <span className="text-sm font-medium text-slate-700">{label}</span>}
 			<input
+				ref={ref}
 				type={type}
 				value={value}
 				onChange={(e) => onChange(e.target.value)}
@@ -22,7 +23,7 @@ export function Input({ label, type = "text", value, onChange, placeholder, requ
 			{error && <p className="mt-1 text-xs text-rose-600">{error}</p>}
 		</label>
 	);
-}
+});
 
 export function Textarea({ label, value, onChange, rows = 3, placeholder, required, disabled, className = "", helperText, error, ...props }) {
 	return (

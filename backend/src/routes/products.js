@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { body, param, query, validationResult } from "express-validator";
 import { pool } from "../config/db.js";
+import jwt from 'jsonwebtoken';
 import { authRequired, requireResourceOwnership } from "../middleware/auth.js";
 import multer from "multer";
 import path from "path";
@@ -78,7 +79,34 @@ router.get('/', [
 			return res.status(400).json({ errors: errors.array() });
 		}
 
-    const { category, min_price, max_price, rating, search, provider_id } = req.query;
+		const { category, min_price, max_price, rating, search, provider_id, idp } = req.query;
+
+		// Owner-fastpath via idp: si frontend indica idp=<id> y el token corresponde al mismo PROVIDER,
+		// devolvemos todos sus productos (sin aplicar filtros públicos)
+		if (idp) {
+			try {
+				const token = req.headers.authorization?.split(' ')[1];
+				if (token) {
+					const decoded = jwt.verify(token, process.env.JWT_SECRET);
+					const [[requester]] = await pool.query(`SELECT u.id, u.role FROM users u WHERE u.id = ?`, [decoded.id]);
+					if (requester && requester.role === 'PROVIDER' && String(requester.id) === String(idp)) {
+						const [products] = await pool.query(
+							`SELECT p.*, u.name as provider_name
+							 FROM products p
+							 INNER JOIN users u ON p.provider_id = u.id
+							 WHERE p.provider_id = ?
+							 ORDER BY p.created_at DESC`,
+							[idp]
+						);
+						console.log('[products] owner request via idp - returning', Array.isArray(products) ? products.length : 0, 'products for provider', idp);
+						return res.json({ products });
+					}
+				}
+			} catch (err) {
+				console.warn('[products] could not verify token for owner-fastpath (idp):', err && err.message);
+				// continuar con flujo público en caso de error
+			}
+		}
     // PENDIENTE para cuando se implemnte la activacion y desactivacions del provedor
     // let query = `
     //   SELECT s.*, u.name as provider_name, 

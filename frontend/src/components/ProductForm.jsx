@@ -48,9 +48,10 @@ export default function ProductForm({ initial = null, onSaved, onCancel }) {
     setError(null);
 
     if (!name.trim()) return setError('El nombre es obligatorio');
-    if (!price || Number.isNaN(Number(price))) return setError('Precio inválido');
+    if (!price || Number.isNaN(Number(price)) || Number(price) <= 0) return setError('Precio inválido: debe ser mayor a 0');
     if (!category) return setError('Seleccione una categoría');
   if (!description || description.trim().length < 100) return setError('La descripción es obligatoria y debe tener al menos 100 caracteres');
+    if (Number(stock) <= 0) return setError('Stock inválido: debe ser mayor a 0');
 
     const payload = {
       name: name.trim(),
@@ -122,13 +123,13 @@ export default function ProductForm({ initial = null, onSaved, onCancel }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <h2 className="text-xl font-semibold">{initial?.id ? 'Editar producto' : 'Nuevo producto'}</h2>
-      {error && <div className="text-sm text-rose-600">{error}</div>}
 
       <Input label="Nombre" value={name} onChange={setName} placeholder="Nombre del producto" />
 
       <div>
-        <Textarea label="Descripción" value={description} onChange={setDescription} rows={3} placeholder="Describe el producto" />
-        <div className="mt-1 text-xs text-slate-500">Actualmente tiene {(description || '').trim().length} caracteres. Mínimo requerido: 100</div>
+        {/* Mostrar error/estilo rojo si la descripción es demasiado corta */}
+        <Textarea label="Descripción" value={description} onChange={setDescription} rows={3} placeholder="Describe el producto" error={(description || '').trim().length > 0 && (description || '').trim().length < 100 ? 'La descripción debe tener al menos 100 caracteres' : undefined} />
+        <div className={`mt-1 text-xs ${((description || '').trim().length > 0 && (description || '').trim().length < 100) ? 'text-rose-600' : 'text-slate-500'}`}>Actualmente tiene {(description || '').trim().length} caracteres. Mínimo requerido: 100</div>
       </div>
 
       <Select
@@ -139,8 +140,8 @@ export default function ProductForm({ initial = null, onSaved, onCancel }) {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Input label="Precio" value={price} onChange={setPrice} inputMode="numeric" placeholder="0.00" />
-        <Input label="Stock" value={stock} onChange={setStock} type="number" min="0" />
+        <Input label="Precio" value={price} onChange={setPrice} inputMode="numeric" placeholder="0.00" min="0.01" step="0.01" />
+          <Input label="Stock" value={stock} onChange={setStock} type="number" min="1" />
       </div>
 
       <Input label="Registro INVIMA (opcional)" value={invima} onChange={setInvima} placeholder="Opcional" />
@@ -177,6 +178,9 @@ export default function ProductForm({ initial = null, onSaved, onCancel }) {
           )}
         </div>
       </div>
+
+      {/* Mostrar errores de formulario justo antes de los botones */}
+      {error && <div className="text-sm text-rose-600">{error}</div>}
 
       <div className="flex items-center justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button>

@@ -65,19 +65,6 @@ export default function LoginScreen({ auth, onDone, redirectTo = "/dashboard" })
 						</button>
 					</div>
 				</div>
-
-				{/* Chips / destacados */}
-				<div className="mt-6">
-					<h2 className="text-base font-semibold text-gray-900">Servicios destacados</h2>
-					<div className="mt-3 flex flex-wrap gap-2">
-						<span className="inline-flex items-center gap-2 rounded-xl bg-emerald-100 px-3 py-1.5 text-sm text-emerald-900">
-							<span className="text-lg">🐾</span> Consulta veterinaria
-						</span>
-						<span className="inline-flex items-center gap-2 rounded-xl bg-indigo-100 px-3 py-1.5 text-sm text-indigo-900">
-							<span className="text-lg">🐾</span> Paseo canino
-						</span>
-					</div>
-				</div>
 			</div>
 		</section>
 	);

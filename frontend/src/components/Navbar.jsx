@@ -15,22 +15,32 @@ const Navbar = () => {
 								PetziGo
 							</Link>
 						</div>
-						<div className="hidden md:ml-6 md:flex md:space-x-8">
-							<Link to="/search" className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900">
-								Buscar
-							</Link>
-							<Link to="/services" className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-900">
-								Servicios
-							</Link>
-							<Link to="/products" className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-900">
-								Productos
-							</Link>
-							{user?.role === 'ADMIN' && (
-								<Link to="/admin/users" className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-900">
-									Admin
-								</Link>
-							)}
-						</div>
+						{user && (
+							user.role === 'PROVIDER' ? (
+								<div className="hidden md:ml-6 md:flex md:space-x-8">
+									<Link to="/provider/profile" className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-900">
+										Perfil proveedor
+									</Link>
+								</div>
+							) : (user.role === 'CLIENT' || user.role === 'ADMIN') ? (
+								<div className="hidden md:ml-6 md:flex md:space-x-8">
+									<Link to="/search" className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900">
+										Buscar
+									</Link>
+									<Link to="/services" className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-900">
+										Servicios
+									</Link>
+									<Link to="/products" className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-900">
+										Productos
+									</Link>
+									{user?.role === 'ADMIN' && (
+										<Link to="/admin/users" className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-900">
+											Admin
+										</Link>
+									)}
+								</div>
+							) : null
+						)}
 					</div>
 					<div className="flex items-center">
 						{user ? (

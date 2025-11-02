@@ -54,6 +54,11 @@ const ProductPurchase = () => {
     if (!product) return setError('Producto inválido');
     if ((product.stock ?? 1) <= 0) return setError('Producto agotado');
     if (!qty || qty < 1) return setError('Cantidad inválida');
+    // Validar dirección obligatoria y longitud mínima
+    if (!address || (address || '').trim().length < 10) {
+      setError('La dirección de entrega es obligatoria y debe tener al menos 10 caracteres');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -143,7 +148,12 @@ const ProductPurchase = () => {
                     <div className="absolute bottom-1 right-1 rounded bg-black/55 text-white text-[10px] px-1.5 py-0.5 pointer-events-none select-none">Haz clic para ampliar</div>
                   </>
                 ) : (
-                  <div className="text-xs text-slate-500">Sin imagen</div>
+                  <div className="flex flex-col items-center justify-center text-xs text-slate-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-violet-400 mb-1" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M7.5 3C6.1 3 5 4.1 5 5.5S6.1 8 7.5 8 10 6.9 10 5.5 8.9 3 7.5 3zM16.5 3c-1.4 0-2.5 1.1-2.5 2.5S15.1 8 16.5 8 19 6.9 19 5.5 17.9 3 16.5 3zM12 5c-1.3 0-2.4.8-2.9 1.9C9.6 7 10.7 7.8 12 7.8s2.4-.8 2.9-1.9C14.4 5.8 13.3 5 12 5zM4 14c0-2.8 2.2-5 5-5h6c2.8 0 5 2.2 5 5v1c0 2.8-4 5-8 5s-8-2.2-8-5v-1z" />
+                    </svg>
+                    <div>Sin imagen</div>
+                  </div>
                 )}
               </div>
 
@@ -157,7 +167,12 @@ const ProductPurchase = () => {
               {/* Campos del formulario principales (no en el panel sticky) */}
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Textarea label="Notas (opcional)" rows={3} value={notes} onChange={setNotes} />
-                <Input label="Dirección de entrega (opcional)" value={address} onChange={setAddress} />
+                <div>
+                  <label className="block text-sm font-medium">Dirección de entrega (obligatoria)</label>
+                  {/* Mostrar borde y mensaje en rojo si la dirección es inválida (menos de 10 caracteres) */}
+                  <Input placeholder="Calle, barrio y número" value={address} onChange={setAddress} className="w-full" error={(address || '').trim().length > 0 && (address || '').trim().length < 10 ? 'La dirección debe tener al menos 10 caracteres' : undefined} />
+                  <div className={`mt-1 text-xs ${((address || '').trim().length > 0 && (address || '').trim().length < 10) ? 'text-rose-600' : 'text-slate-500'}`}>Actualmente tiene {(address || '').trim().length} caracteres. Mínimo requerido: 10</div>
+                </div>
               </div>
             </div>
 
@@ -210,7 +225,12 @@ const ProductPurchase = () => {
             {imgModal.src ? (
               <img src={imgModal.src} alt={imgModal.alt} className="max-h-[80vh] w-auto mx-auto rounded" />
             ) : (
-              <div className="text-slate-500 text-sm">Sin imagen</div>
+              <div className="flex flex-col items-center justify-center text-sm text-slate-500">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-violet-400 mb-1" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M7.5 3C6.1 3 5 4.1 5 5.5S6.1 8 7.5 8 10 6.9 10 5.5 8.9 3 7.5 3zM16.5 3c-1.4 0-2.5 1.1-2.5 2.5S15.1 8 16.5 8 19 6.9 19 5.5 17.9 3 16.5 3zM12 5c-1.3 0-2.4.8-2.9 1.9C9.6 7 10.7 7.8 12 7.8s2.4-.8 2.9-1.9C14.4 5.8 13.3 5 12 5zM4 14c0-2.8 2.2-5 5-5h6c2.8 0 5 2.2 5 5v1c0 2.8-4 5-8 5s-8-2.2-8-5v-1z" />
+                </svg>
+                <div>Sin imagen</div>
+              </div>
             )}
           </div>
         </Modal>

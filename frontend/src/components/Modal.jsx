@@ -52,7 +52,7 @@ export default function Modal({ isOpen, onClose, children, ariaLabel }) {
       {/* Modal content */}
       <div
         ref={overlayRef}
-        className="relative z-10 w-full max-w-2xl mx-4 bg-white rounded-2xl shadow-xl p-6 ring-1 ring-slate-200"
+        className="relative z-10 w-full max-w-2xl mx-4 bg-white rounded-2xl shadow-xl p-6 ring-1 ring-slate-200 max-h-[90vh] sm:max-h-[80vh] overflow-y-auto"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <button
@@ -62,7 +62,7 @@ export default function Modal({ isOpen, onClose, children, ariaLabel }) {
         >
           ✕
         </button>
-        <div>{children}</div>
+        <div className="overflow-auto">{children}</div>
       </div>
     </div>,
     document.body

@@ -160,8 +160,13 @@ function ordersBaseQuery(extraFilter = '') {
                  o.mercadopago_preference_id AS mpPreferenceId,
                  o.mercadopago_payment_id AS mpPaymentId,
                  o.provider_id AS providerId,
-                 u.name AS buyerName,
-                 u.email AS buyerEmail,
+                 u.id AS buyer_id,
+                 u.name AS buyer_name,
+                 u.email AS buyer_email,
+                 u.phone AS buyer_phone,
+                 u.address AS buyer_address,
+                 u.created_at AS buyer_created_at,
+                 u.updated_at AS buyer_updated_at,
                  p.id AS productId,
                  p.name AS productName,
                  p.price AS productPrice,
@@ -173,8 +178,21 @@ function ordersBaseQuery(extraFilter = '') {
                  pp.business_description AS providerDescription,
                  pp.location_lat AS providerBaseLat,
                  pp.location_lng AS providerBaseLng,
-                 pet.id AS petId,
-                 pet.name AS petName
+                 pet.id AS pet_id,
+                 pet.user_id AS pet_owner_id,
+                 pet.name AS pet_name,
+                 pet.species AS pet_species,
+                 pet.breed AS pet_breed,
+                 pet.birth_date AS pet_birth_date,
+                 pet.special_needs AS pet_special_needs,
+                 pet.photo_url AS pet_image_url,
+                 pet.created_at AS pet_created_at,
+                 pet.updated_at AS pet_updated_at,
+                 -- owner info for the pet (may differ from order buyer)
+                 pet_owner.id AS pet_owner_user_id,
+                 pet_owner.name AS pet_owner_name,
+                 pet_owner.email AS pet_owner_email,
+                 pet_owner.phone AS pet_owner_phone
           FROM orders o
           JOIN users u ON u.id = o.user_id
           JOIN users prov ON prov.id = o.provider_id
@@ -182,6 +200,7 @@ function ordersBaseQuery(extraFilter = '') {
           LEFT JOIN products p ON p.id = o.product_id
           LEFT JOIN services s ON s.id = o.service_id
           LEFT JOIN pets pet ON pet.id = o.pet_id
+          LEFT JOIN users pet_owner ON pet_owner.id = pet.user_id
           ${extraFilter}`;
 }
 
