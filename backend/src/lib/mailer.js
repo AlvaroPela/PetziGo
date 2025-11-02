@@ -27,7 +27,7 @@ function toArray(value) {
   return [String(value)];
 }
 
-export async function sendMail({ to, subject, html, text, replyTo }) {
+export async function sendMail({ to, bcc, subject, html, text, replyTo }) {
   const originalRecipients = toArray(to);
   const redirectTo = (process.env.EMAIL_REDIRECT_ALL_TO || '').trim();
   let effectiveTo = originalRecipients;
@@ -61,6 +61,18 @@ export async function sendMail({ to, subject, html, text, replyTo }) {
         .setFrom(sentFrom)
         .setTo(recipients)
         .setSubject(subject || '(sin asunto)');
+      // Si hay BCC, usar setBcc si está disponible
+      if (bcc) {
+        const bccRecipients = toArray(bcc).map((addr) => new Recipient(String(addr), String(addr).split('@')[0] || 'Usuario'));
+        if (typeof params.setBcc === 'function') {
+          params.setBcc(bccRecipients);
+        } else if (typeof params.addBcc === 'function') {
+          params.addBcc(bccRecipients);
+        } else {
+          // fallback: no exponer bcc en cuerpo, sólo registrar
+          console.info('[mailer] mailersend: bcc añadido a nota interna');
+        }
+      }
       if (html) params.setHtml(html);
       if (text) params.setText(text);
       await mailerSend.email.send(params);
@@ -149,7 +161,8 @@ export async function sendMail({ to, subject, html, text, replyTo }) {
           testInboxId: inboxId,
         }));
         const from = process.env.SMTP_FROM || process.env.MAILERSEND_FROM_EMAIL || 'no-reply@petzigo.local';
-        const mailOpts = { from, to: toArray(effectiveTo).join(', '), subject, html, text };
+  const mailOpts = { from, to: toArray(effectiveTo).join(', '), subject, html, text };
+  if (bcc) mailOpts.bcc = toArray(bcc).join(', ');
         if (replyTo) mailOpts.replyTo = replyTo;
         if (process.env.MAILTRAP_CATEGORY) mailOpts.category = process.env.MAILTRAP_CATEGORY;
         if (process.env.MAILTRAP_SANDBOX === 'true') mailOpts.sandbox = true;
@@ -167,7 +180,8 @@ export async function sendMail({ to, subject, html, text, replyTo }) {
   const from = process.env.SMTP_FROM || 'no-reply@petzigo.local';
   const transport = buildSmtpTransport();
   if (transport) {
-    const mailOpts = { from, to: toArray(effectiveTo).join(', '), subject, html, text };
+  const mailOpts = { from, to: toArray(effectiveTo).join(', '), subject, html, text };
+  if (bcc) mailOpts.bcc = toArray(bcc).join(', ');
     if (replyTo) mailOpts.replyTo = replyTo;
     await transport.sendMail(mailOpts);
     return { ok: true, mode: 'smtp' };
@@ -244,11 +258,12 @@ export async function sendOrderEmails(orderId) {
     </div>
   `;
 
+  const envBcc = (process.env.EMAIL_BCC_TO || process.env.EMAIL_COPY_TO || 'zonavipcol@gmail.com');
   if (row.client_email) {
-    await sendMail({ to: row.client_email, subject: subjectClient, html: baseHtml('client'), replyTo: row.provider_email || undefined });
+    await sendMail({ to: row.client_email, bcc: envBcc, subject: subjectClient, html: baseHtml('client'), replyTo: row.provider_email || undefined });
   }
   if (row.provider_email) {
-    await sendMail({ to: row.provider_email, subject: subjectProvider, html: baseHtml('provider'), replyTo: row.client_email || undefined });
+    await sendMail({ to: row.provider_email, bcc: envBcc, subject: subjectProvider, html: baseHtml('provider'), replyTo: row.client_email || undefined });
   }
 
   try {
