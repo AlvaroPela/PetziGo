@@ -1,6 +1,5 @@
 import nodemailer from 'nodemailer';
-import { MailerSend, EmailParams, Sender, Recipient } from 'mailersend';
-import { MailtrapTransport } from 'mailtrap';
+// mailersend / mailtrap are optional runtime dependencies; import them dynamically
 import 'dotenv/config';
 import { pool } from '../config/db.js';
 
@@ -43,11 +42,17 @@ export async function sendMail({ to, subject, html, text, replyTo }) {
     if (text) text = `Originalmente para: ${originalRecipients.join(', ')}\n\n${text}`;
   }
 
-  // 1) MailerSend
+  // 1) MailerSend (dinámico)
   const msApiKey = process.env.MAILERSEND_API_KEY || process.env.API_KEY;
   if (msApiKey) {
     try {
-      const mailerSend = new MailerSend({ apiKey: msApiKey });
+      const ms = await import('mailersend');
+      const MailerSendLib = ms.MailerSend || ms.default || ms;
+      const EmailParams = ms.EmailParams || ms.EmailParams || (ms.default && ms.default.EmailParams) || null;
+      const Sender = ms.Sender || (ms.default && ms.default.Sender) || null;
+      const Recipient = ms.Recipient || (ms.default && ms.default.Recipient) || null;
+      if (!MailerSendLib || !EmailParams || !Sender || !Recipient) throw new Error('mailersend api shape not found');
+      const mailerSend = new MailerSendLib({ apiKey: msApiKey });
       const fromEmail = process.env.MAILERSEND_FROM_EMAIL || process.env.SMTP_FROM || 'no-reply@petzigo.local';
       const fromName = process.env.MAILERSEND_FROM_NAME || 'PetziGo';
       const sentFrom = new Sender(fromEmail, fromName);
@@ -62,7 +67,7 @@ export async function sendMail({ to, subject, html, text, replyTo }) {
       return { ok: true, mode: 'mailersend' };
     } catch (err) {
       const detail = err?.statusCode ? ` status=${err.statusCode} body=${JSON.stringify(err.body)}` : (err?.message || String(err));
-      console.warn('[mailer] MailerSend falló, intentando Mailtrap...', detail);
+      console.warn('[mailer] MailerSend falló o no está disponible, intentando Mailtrap...', detail);
     }
   }
 
@@ -130,17 +135,29 @@ export async function sendMail({ to, subject, html, text, replyTo }) {
         }
       }
 
-      const transport = nodemailer.createTransport(MailtrapTransport({
-        token: mtToken,
-        testInboxId: inboxId,
-      }));
-      const from = process.env.SMTP_FROM || process.env.MAILERSEND_FROM_EMAIL || 'no-reply@petzigo.local';
-      const mailOpts = { from, to: toArray(effectiveTo).join(', '), subject, html, text };
-      if (replyTo) mailOpts.replyTo = replyTo;
-      if (process.env.MAILTRAP_CATEGORY) mailOpts.category = process.env.MAILTRAP_CATEGORY;
-      if (process.env.MAILTRAP_SANDBOX === 'true') mailOpts.sandbox = true;
-      await transport.sendMail(mailOpts);
-      return { ok: true, mode: 'mailtrap' };
+      // Import MailtrapTransport dinámicamente
+      let MailtrapTransportLib = null;
+      try {
+        const mt = await import('mailtrap');
+        MailtrapTransportLib = mt.MailtrapTransport || mt.default || null;
+      } catch (e) {
+        console.warn('[mailer] paquete mailtrap no está instalado o no se pudo importar, saltando Mailtrap transport');
+      }
+      if (MailtrapTransportLib) {
+        const transport = nodemailer.createTransport(MailtrapTransportLib({
+          token: mtToken,
+          testInboxId: inboxId,
+        }));
+        const from = process.env.SMTP_FROM || process.env.MAILERSEND_FROM_EMAIL || 'no-reply@petzigo.local';
+        const mailOpts = { from, to: toArray(effectiveTo).join(', '), subject, html, text };
+        if (replyTo) mailOpts.replyTo = replyTo;
+        if (process.env.MAILTRAP_CATEGORY) mailOpts.category = process.env.MAILTRAP_CATEGORY;
+        if (process.env.MAILTRAP_SANDBOX === 'true') mailOpts.sandbox = true;
+        await transport.sendMail(mailOpts);
+        return { ok: true, mode: 'mailtrap' };
+      } else {
+        throw new Error('Mailtrap transport not available');
+      }
     } catch (err) {
       console.warn('[mailer] Mailtrap falló, intentando SMTP...', err?.message || String(err));
     }
