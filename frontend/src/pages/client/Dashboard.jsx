@@ -267,9 +267,14 @@ const ClientDashboard = () => {
                           </div>
                           <div className="text-xs text-slate-400 mt-2">Actualizado: {o.updatedAt ? formatDate(o.updatedAt) : '—'}</div>
                           {(o.paymentStatus) && (
-                            (o.paymentStatus || '').toUpperCase() === 'COMPLETED'
-                              ? <div className="text-xs text-slate-500 mt-1">Pago: Confirmado</div>
-                              : <div className="text-xs text-slate-500 mt-1">Pago: {o.paymentStatus}</div>
+                            (() => {
+                              const ps = (o.paymentStatus || '').toUpperCase();
+                              if (ps === 'COMPLETED') return <div className="text-xs mt-1 inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-700">Pago: Confirmado</div>;
+                              if (ps === 'PENDING' || ps === 'IN_PROCESS' || ps === 'PROCESSING') return <div className="text-xs mt-1 inline-block px-2 py-0.5 rounded bg-amber-50 text-amber-700">Pago: {o.paymentStatus}</div>;
+                              if (ps === 'FAILED' || ps === 'REJECTED') return <div className="text-xs mt-1 inline-block px-2 py-0.5 rounded bg-rose-50 text-rose-700">Pago: {o.paymentStatus}</div>;
+                              if (ps === 'REFUNDED' || ps === 'CHARGEBACK') return <div className="text-xs mt-1 inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700">Pago: {o.paymentStatus}</div>;
+                              return <div className="text-xs mt-1 inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700">Pago: {o.paymentStatus}</div>;
+                            })()
                           )}
                           {/* Mensaje para servicios en curso y pagados: pago recibido, pendiente de finalización por el proveedor */}
                           {((o.itemType || o.item_type) === 'SERVICE') && (o.status || '').toUpperCase() === 'IN_PROGRESS' && (o.paymentStatus || '').toUpperCase() === 'COMPLETED' && (
