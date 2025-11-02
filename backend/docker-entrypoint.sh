@@ -6,7 +6,7 @@ echo "[entrypoint] Iniciando entrypoint del backend"
 # Valores por defecto para pruebas (puedes sobrescribir con env vars al ejecutar el contenedor)
 ADMIN_NAME=${ADMIN_NAME:-"Administrador"}
 ADMIN_EMAIL=${ADMIN_EMAIL:-"admin@petzigo.com"}
-ADMIN_PASSWORD=${ADMIN_PASSWORD:-"123456789"}
+ADMIN_PASSWORD=${ADMIN_PASSWORD:-"Petzigo.2025"}
 
 # Número máximo de intentos para crear el admin (espera a que la DB esté lista)
 MAX_RETRIES=${ADMIN_CREATE_RETRIES:-10}
