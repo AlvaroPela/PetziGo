@@ -303,7 +303,7 @@ const ClientDashboard = () => {
                                         window.__mpPopupRef = popup;
                                         window.__mpCurrentOrderId = String(o.id);
                                         localStorage.setItem(`mp_init_point_${o.id}`, redirectUrl);
-                                        const deadline = Date.now() + 1 * 60 * 1000;
+                                        const deadline = Date.now() + 10 * 60 * 1000;
                                         localStorage.setItem(`mp_wait_deadline_${o.id}`, String(deadline));
                                       } catch {}
                                       window.location.assign(`/payments/wait?external_reference=${encodeURIComponent(o.id)}`);

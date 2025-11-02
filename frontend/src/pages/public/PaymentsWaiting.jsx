@@ -16,7 +16,7 @@ const PaymentsWaiting = () => {
   const [info, setInfo] = useState(null);
   const [checking, setChecking] = useState(false);
   const [popupClosed, setPopupClosed] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(300); // segundos
+  const [timeLeft, setTimeLeft] = useState(600); // segundos (10 minutos)
   const [timeoutHandled, setTimeoutHandled] = useState(false);
   const storageKey = orderId ? `mp_payment_result_${orderId}` : null;
 
@@ -51,7 +51,8 @@ const PaymentsWaiting = () => {
     const key = `mp_wait_deadline_${orderId}`;
     let deadline = parseInt(localStorage.getItem(key) || '0', 10);
     if (!deadline || Number.isNaN(deadline)) {
-      deadline = Date.now() + 1 * 60 * 1000;
+      // 10 minutos
+      deadline = Date.now() + 10 * 60 * 1000;
       try { localStorage.setItem(key, String(deadline)); } catch (e) { /* ignore */ }
     }
     const interval = setInterval(() => {
@@ -252,7 +253,7 @@ const PaymentsWaiting = () => {
               <div className="text-sm text-slate-600">Pago en proceso. Puedes verificar manualmente cuando desees.</div>
             )}
             {status === 'TIMEOUT' && (
-              <div className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded p-2">Tiempo agotado (5 minutos). Si aún deseas pagar, reabre el checkout.</div>
+              <div className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded p-2">Tiempo agotado (10 minutos). Si aún deseas pagar, reabre el checkout.</div>
             )}
 
             {status !== 'COMPLETED' && (

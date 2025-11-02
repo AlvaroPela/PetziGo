@@ -10,6 +10,30 @@ const ServiceBooked = () => {
   const q = useQuery();
   const orderId = q.get('orderId');
 
+  // Disable primary CTA for a short time so user can read the message
+  const [countdown, setCountdown] = React.useState(10);
+  const [disabled, setDisabled] = React.useState(true);
+  React.useEffect(() => {
+    let mounted = true;
+    if (!mounted) return;
+    setDisabled(true);
+    setCountdown(10);
+    const t = setInterval(() => {
+      setCountdown((c) => {
+        if (c <= 1) {
+          clearInterval(t);
+          if (mounted) setDisabled(false);
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+    return () => {
+      mounted = false;
+      clearInterval(t);
+    };
+  }, []);
+
   let summary = null;
   try {
     if (orderId) {
@@ -37,7 +61,13 @@ const ServiceBooked = () => {
               </div>
             )}
             <div className="pt-2 flex gap-2">
-              <Button onClick={() => navigate('/client')}>Ir a mi panel</Button>
+              <Button
+                onClick={() => navigate('/client')}
+                disabled={disabled}
+                className={`${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+              >
+                {disabled ? `Ir a mi panel (${countdown}s)` : 'Ir a mi panel'}
+              </Button>
               <Button variant="outline" onClick={() => navigate(`/services/${id}`)}>Volver al servicio</Button>
             </div>
           </div>

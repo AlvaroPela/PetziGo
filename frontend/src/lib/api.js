@@ -1,5 +1,6 @@
 // src/lib/api.js
-export const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000/api";
+// Prefer a relative API base so the SPA can call /api which nginx will proxy to the backend.
+export const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
 // Devuelve URL absoluta para assets servidos por el backend (ej. /uploads/..)
 export function assetUrl(p) {
@@ -10,6 +11,10 @@ export function assetUrl(p) {
   if (/^https?:\/\//i.test(p)) return p;
   // quitar sufijo /api del API_BASE para apuntar al origen del backend
   const origin = API_BASE.replace(/\/?api\/?$/i, '');
+  if (!origin) {
+    // API_BASE is relative (/api) so return a relative uploads path that nginx podrá proxyar
+    return p.startsWith('/') ? p : `/${p}`;
+  }
   return `${origin}${p.startsWith('/') ? p : `/${p}`}`;
 }
 

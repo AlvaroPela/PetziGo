@@ -103,12 +103,12 @@ const ProductPurchase = () => {
 
       // 3) Abrir checkout en popup y navegar a waiting
       try {
-        const popup = window.open(redirectUrl, 'mp_checkout', 'width=900,height=700');
+          const popup = window.open(redirectUrl, 'mp_checkout', 'width=900,height=700');
         try {
           window.__mpPopupRef = popup;
           window.__mpCurrentOrderId = String(orderRes.id);
           localStorage.setItem(`mp_init_point_${orderRes.id}`, redirectUrl);
-          const deadline = Date.now() + 1 * 60 * 1000; // 5 minutos
+            const deadline = Date.now() + 10 * 60 * 1000; // 10 minutos
           localStorage.setItem(`mp_wait_deadline_${orderRes.id}`, String(deadline));
         } catch { /* ignore */ }
       } catch (openErr) {
