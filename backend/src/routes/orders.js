@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { body, validationResult, query, param } from 'express-validator';
 import { pool } from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
+import { sendMail, sendOrderEmails } from '../lib/mailer.js';
 
 const router = Router();
 // Estados válidos según schema.sql
@@ -109,6 +110,15 @@ router.post('/', authRequired('CLIENT'), creationValidations, async (req, res) =
       totalAmount
     ]
   );
+
+  // Enviar notificaciones por correo al cliente y al proveedor informando de la nueva orden
+  try {
+    const orderId = result.insertId;
+    // Usar la plantilla unificada y la lógica de encolado/marcado de notificaciones
+    await sendOrderEmails(orderId);
+  } catch (mailErr) {
+    console.error('[orders] error enviando notificaciones de nueva orden:', mailErr?.message || String(mailErr));
+  }
 
   res.status(201).json({ id: result.insertId, status: initialStatus, paymentStatus: 'PENDING', totalAmount });
 });
@@ -294,6 +304,14 @@ router.patch('/:id/status', authRequired(['PROVIDER', 'ADMIN']), [
      VALUES (?, ?, ?, ?)` ,
     [id, order.status, status, req.user.id]
   );
+  // Notificar por correo al cliente y proveedor sobre el cambio de estado
+  try {
+    // sendOrderEmails aplica plantilla consistente (cliente y proveedor), marca notifications_sent
+    await sendOrderEmails(id);
+  } catch (mailErr) {
+    console.error('[orders] error enviando notificaciones de estado:', mailErr?.message || String(mailErr));
+  }
+
   res.json({ ok: true, status });
 });
 

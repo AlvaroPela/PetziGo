@@ -51,6 +51,30 @@ services:
       timeout: 5s
       retries: 5
 
+  email_worker:
+    container_name: petzigo-email-worker
+    restart: unless-stopped
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: ${NODE_ENV:-production}
+    env_file:
+      - ./backend/.env
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - DB_HOST=db
+      - DB_PORT=3306
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/usr/src/app:cached
+      - /usr/src/app/node_modules
+    command: sh -c "npm install --no-audit --no-fund && npm run email-worker"
+    networks:
+      - petzigo-net
+
   frontend:
     container_name: petzigo-frontend
     restart: unless-stopped

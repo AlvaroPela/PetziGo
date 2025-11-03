@@ -72,7 +72,7 @@ router.get('/', [
   query('rating').optional().isFloat({ min: 1, max: 5 }),
   query('search').optional().trim()
 ], async (req, res) => {
-  console.log('[products] GET / - query:', req.query);
+		if (process.env.NODE_ENV !== 'production') console.debug('[products] GET / - query:', req.query);
 	try {
 		const errors = validationResult(req);
 		if (!errors.isEmpty()) {
@@ -98,7 +98,7 @@ router.get('/', [
 							 ORDER BY p.created_at DESC`,
 							[idp]
 						);
-						console.log('[products] owner request via idp - returning', Array.isArray(products) ? products.length : 0, 'products for provider', idp);
+						if (process.env.NODE_ENV !== 'production') console.debug('[products] owner request via idp - returning', Array.isArray(products) ? products.length : 0, 'products for provider', idp);
 						return res.json({ products });
 					}
 				}
@@ -166,8 +166,8 @@ router.get('/', [
 
     const [products] = await pool.query(query, values);
 
-  console.log('[products] found', Array.isArray(products) ? products.length : 0, 'products');
-  res.json({ products });
+	console.info('[products] found', Array.isArray(products) ? products.length : 0, 'products');
+	res.json({ products });
 
   } catch (err) {
     console.error('Error al obtener products:', err);
@@ -200,7 +200,7 @@ router.get('/mine', authRequired("PROVIDER"), async (req, res) => {
 
 // Obtener un producto específico por id numérico
 router.get('/:id', [param('id').isInt({ min: 1 })], async (req, res) => {
-	console.log('[products] GET /:id - id:', req.params.id);
+			if (process.env.NODE_ENV !== 'production') console.debug('[products] GET /:id - id:', req.params.id);
 	try {
 		const errors = validationResult(req);
 		if (!errors.isEmpty()) {
@@ -233,6 +233,33 @@ router.get('/:id', [param('id').isInt({ min: 1 })], async (req, res) => {
 			 LIMIT 10`,
 			[productRow.provider_id]
 		);
+
+		// Incluir la reseña propia del cliente (si viene token) incluso si está PENDING
+		try {
+			const token = req.headers.authorization?.split(' ')[1];
+			if (token) {
+				const decoded = jwt.verify(token, process.env.JWT_SECRET);
+				if (decoded && decoded.id) {
+					const [[requester]] = await pool.query('SELECT id, role FROM users WHERE id = ?', [decoded.id]);
+					if (requester && requester.role === 'CLIENT') {
+						const [[myRev]] = await pool.query(
+							`SELECT r.rating, r.comment, r.created_at, u.name as client_name, r.status
+							 FROM reviews r
+							 INNER JOIN orders o ON o.id = r.order_id
+							 INNER JOIN users u ON u.id = r.client_id
+							 WHERE r.client_id = ? AND o.product_id = ? LIMIT 1`,
+							[requester.id, productRow.id]
+						);
+						if (myRev && myRev.rating != null) {
+							const exists = reviews.find(rv => rv.created_at && new Date(rv.created_at).getTime() === new Date(myRev.created_at).getTime() && rv.client_name === myRev.client_name);
+							if (!exists) reviews.unshift({ rating: myRev.rating, comment: myRev.comment, created_at: myRev.created_at, client_name: myRev.client_name });
+						}
+					}
+				}
+			}
+		} catch (e) {
+			if (process.env.NODE_ENV !== 'production') console.debug('[products] token parse error', e && e.message);
+		}
 
 		const product = {
 			id: productRow.id,

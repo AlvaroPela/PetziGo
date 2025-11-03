@@ -35,9 +35,44 @@ const ProductDetails = () => {
     return () => { cancelled = true; };
   }, [id]);
 
+  // Cargar reseña del usuario si es CLIENT
+  useEffect(() => {
+    if (!user || user.role !== 'CLIENT' || !product) return;
+    let cancelled = false;
+    async function loadMine() {
+      setLoadingMyReview(true);
+      try {
+        const mine = await api('/reviews/mine');
+        if (cancelled) return;
+        const found = (mine || []).find(r => r.item_type === 'PRODUCT' && Number(r.product_id) === Number(product.id));
+        if (found) {
+          setMyReview(found);
+          setEditingReviewId(found.id);
+          setFormRating(found.rating);
+          setFormComment(found.comment || '');
+        } else {
+          setMyReview(null);
+          setEditingReviewId(null);
+        }
+      } catch (err) {
+        console.error('Error cargando mis reseñas', err);
+      } finally {
+        if (!cancelled) setLoadingMyReview(false);
+      }
+    }
+    loadMine();
+    return () => { cancelled = true; };
+  }, [user, product]);
+
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [showProviderModal, setShowProviderModal] = useState(false);
   const [showClientModal, setShowClientModal] = useState(false);
+  const [myReview, setMyReview] = useState(null);
+  const [loadingMyReview, setLoadingMyReview] = useState(false);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [formRating, setFormRating] = useState(5);
+  const [formComment, setFormComment] = useState('');
+  const [editingReviewId, setEditingReviewId] = useState(null);
 
   const handleBuy = () => {
     if (user && user.role === 'PROVIDER') {
@@ -138,6 +173,69 @@ const ProductDetails = () => {
 
               <div>
                 <h2 className="text-xl font-semibold mb-2">Reseñas</h2>
+                {/* Formulario de reseña para clientes */}
+                {user && user.role === 'CLIENT' && (
+                  <div className="mb-4">
+                    {myReview ? (
+                      <div className="mb-2">
+                        <div className="flex items-center gap-3">
+                          <div className="text-sm text-slate-600">Tu reseña existente:</div>
+                          {myReview?.status === 'PENDING' ? (
+                            <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">Tu reseña · pendiente</span>
+                          ) : (
+                            <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">Tu reseña</span>
+                          )}
+                        </div>
+                        <div className="border rounded-md p-2 mt-2">
+                          <div className="flex items-center justify-between">
+                            <div className="font-medium">Tu</div>
+                            <div className="text-sm text-slate-500">{new Date(myReview.created_at).toLocaleDateString()}</div>
+                          </div>
+                          <div className="mt-1"><RatingStars value={myReview.rating} size="text-sm" /></div>
+                          {myReview.comment && <div className="text-sm text-slate-700 mt-2">{myReview.comment}</div>}
+                          <div className="mt-2 flex gap-2">
+                            <button className="px-3 py-1 rounded bg-violet-600 text-white text-sm" onClick={() => setShowReviewForm(true)}>Editar</button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mb-2">
+                        <button className="px-3 py-1 rounded bg-violet-600 text-white text-sm" onClick={() => { setShowReviewForm(true); setFormRating(5); setFormComment(''); setEditingReviewId(null); }}>{loadingMyReview ? 'Cargando...' : 'Escribir reseña'}</button>
+                      </div>
+                    )}
+                    {showReviewForm && (
+                      <div className="border rounded-md p-3 bg-white mt-2">
+                        <div className="mb-2">Califica</div>
+                        <div className="flex items-center gap-2 mb-3">
+                          {[5,4,3,2,1].map(v => (
+                            <button key={v} onClick={() => setFormRating(v)} className={`px-2 py-1 rounded ${formRating===v? 'bg-amber-300' : 'bg-gray-100'}`}>{v} ★</button>
+                          ))}
+                        </div>
+                        <textarea className="w-full border p-2 rounded mb-3" rows={4} value={formComment} onChange={e => setFormComment(e.target.value)} placeholder="Cuenta tu experiencia... (opcional)" />
+                        <div className="flex gap-2">
+                          <button onClick={async () => {
+                            try {
+                              if (editingReviewId) {
+                                await api(`/reviews/${editingReviewId}`, { method: 'PUT', body: { rating: formRating, comment: formComment } });
+                              } else {
+                                await api('/reviews', { method: 'POST', body: { itemType: 'PRODUCT', itemId: product.id, rating: formRating, comment: formComment } });
+                              }
+                              // recargar producto para actualizar lista
+                              const d = await api(`/products/${product.id}`);
+                              setProduct(d.product || product);
+                              setShowReviewForm(false);
+                            } catch (err) {
+                              console.error('Error enviando reseña', err);
+                              alert(err?.message || 'Error al enviar reseña');
+                            }
+                          }} className="px-3 py-1 rounded bg-green-600 text-white">Enviar</button>
+                          <button onClick={() => setShowReviewForm(false)} className="px-3 py-1 rounded bg-gray-100">Cancelar</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {reviews && reviews.length > 0 ? (
                   <div className="space-y-3">
                     {reviews.map((r, i) => (

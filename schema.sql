@@ -184,6 +184,21 @@ CREATE TABLE IF NOT EXISTS gps_locations (
   UNIQUE KEY uniq_gps_provider (provider_id)
 );
 
+CREATE TABLE IF NOT EXISTS email_jobs (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  recipient TEXT,
+  bcc TEXT,
+  subject TEXT,
+  html LONGTEXT,
+  text LONGTEXT,
+  reply_to VARCHAR(255),
+  status VARCHAR(32) DEFAULT 'pending',
+  attempts INT DEFAULT 0,
+  last_error TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  processed_at TIMESTAMP NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Índices para optimizar búsquedas
 CREATE INDEX idx_services_category ON services(category);
 CREATE INDEX idx_products_category ON products(category);
@@ -192,3 +207,22 @@ CREATE INDEX idx_orders_dates ON orders(service_date);
 CREATE INDEX idx_provider_location ON provider_profiles(location_lat, location_lng);
 CREATE INDEX idx_reviews_provider ON reviews(provider_id);
 CREATE INDEX idx_orders_mp_payment_id ON orders(mercadopago_payment_id);
+--
+-- Additional SQL files copied from backend/sql/
+-- Source: backend/sql/add_order_status_history.sql
+-- NOTE: this was appended automatically by a maintenance script.
+--
+
+-- Migration: add_order_status_history.sql
+-- Crea la tabla order_status_history para registrar cambios de estado de órdenes
+
+CREATE TABLE IF NOT EXISTS order_status_history (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  order_id BIGINT NOT NULL,
+  old_status VARCHAR(64) DEFAULT NULL,
+  new_status VARCHAR(64) DEFAULT NULL,
+  changed_by BIGINT DEFAULT NULL,
+  changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX (order_id),
+  INDEX (changed_by)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

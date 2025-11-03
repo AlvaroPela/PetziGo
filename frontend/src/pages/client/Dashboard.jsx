@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, assetUrl } from '../../lib/api';
 import Modal from '../../components/Modal';
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';
+import { petIcon } from '../../components/Map';
 
 const statusBadge = (status) => {
   const s = (status || '').toUpperCase();
@@ -303,7 +304,8 @@ const ClientDashboard = () => {
                                         window.__mpPopupRef = popup;
                                         window.__mpCurrentOrderId = String(o.id);
                                         localStorage.setItem(`mp_init_point_${o.id}`, redirectUrl);
-                                        const deadline = Date.now() + 10 * 60 * 1000;
+                                        const waitMin = Number(import.meta.env.VITE_PAYMENT_WAIT_MINUTES || 10);
+                                        const deadline = Date.now() + Math.max(1, waitMin) * 60 * 1000;
                                         localStorage.setItem(`mp_wait_deadline_${o.id}`, String(deadline));
                                       } catch {}
                                       window.location.assign(`/payments/wait?external_reference=${encodeURIComponent(o.id)}`);
@@ -457,7 +459,7 @@ const ClientDashboard = () => {
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
-                <Marker position={[gpsModal.points[0].latitude, gpsModal.points[0].longitude]} />
+                <Marker icon={petIcon} position={[gpsModal.points[0].latitude, gpsModal.points[0].longitude]} />
               </MapContainer>
               <div className="mt-2 text-xs text-slate-600">Última actualización: {formatDate(gpsModal.points[0].at)}</div>
             </div>

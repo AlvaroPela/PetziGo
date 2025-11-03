@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { petIcon } from './Map';
 
 function ClickHandler({ onPick }) {
   useMapEvents({
@@ -28,7 +29,7 @@ export default function LocationPickerMap({ value, onChange, center = [6.2442, -
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <ClickHandler onPick={handlePick} />
-        {pos && <Marker position={pos} />} 
+  {pos && <Marker icon={petIcon} position={pos} />} 
       </MapContainer>
       <div className="mt-2 text-xs text-slate-600">
         {pos ? `Lat: ${pos[0].toFixed(6)}, Lng: ${pos[1].toFixed(6)}` : 'Haz clic en el mapa para elegir tu ubicación'}

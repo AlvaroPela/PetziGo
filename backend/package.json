@@ -4,9 +4,10 @@
   "type": "module",
   "main": "src/server.js",
   "scripts": {
-    "dev": "nodemon src/server.js",
-    "start": "NODE_ENV=production node src/server.js",
-    "create:admin": "node src/scripts/create_admin.js"
+  "dev": "nodemon src/server.js",
+  "start": "NODE_ENV=production node src/server.js",
+  "create:admin": "node src/scripts/create_admin.js",
+  "email-worker": "node src/scripts/email_worker.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.454.0",
@@ -22,8 +23,11 @@
     "multer": "^1.4.5-lts.1",
     "mysql2": "^3.9.7",
     "nodemailer": "^6.9.3",
-    "nodemon": "^3.1.10",
     "socket.io": "^4.7.2",
     "uuid": "^9.0.1"
+  }
+  ,
+  "devDependencies": {
+    "nodemon": "^3.1.10"
   }
 }

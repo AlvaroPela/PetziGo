@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import dotenv from 'dotenv';
 import { pool } from '../config/db.js';
-import { sendOrderEmails } from '../lib/mailer.js';
+import { sendOrderEmails, sendMail } from '../lib/mailer.js';
 
 dotenv.config();
 
@@ -34,7 +34,26 @@ async function checkAndCancelIfUnpaid(orderId) {
          WHERE id = ? AND status <> 'COMPLETED'`,
         [orderId]
       );
-      return { ok: true, cancelled: result.affectedRows > 0 };
+      const cancelled = result.affectedRows > 0;
+      // Notificar al comprador y proveedor que la orden fue cancelada por falta de pago
+      if (cancelled) {
+        try {
+          const [[ord]] = await pool.query('SELECT id, user_id, provider_id, total_amount FROM orders WHERE id = ? LIMIT 1', [orderId]);
+          if (ord) {
+            const [[buyer]] = await pool.query('SELECT id, name, email FROM users WHERE id = ? LIMIT 1', [ord.user_id]);
+            const [[provider]] = await pool.query('SELECT id, name, email FROM users WHERE id = ? LIMIT 1', [ord.provider_id]);
+            const subject = `Orden #${orderId} cancelada por falta de pago`;
+            const html = `<p>La orden <strong>#${orderId}</strong> fue cancelada automáticamente porque no se registró el pago en el tiempo permitido.</p><p>Total: <strong>${Number(ord.total_amount).toLocaleString('es-CO', { style: 'currency', currency: 'COP' })}</strong></p>`;
+            await Promise.all([
+              buyer?.email ? sendMail({ to: buyer.email, bcc: process.env.EMAIL_BCC_TO, subject, html }) : Promise.resolve(),
+              provider?.email ? sendMail({ to: provider.email, bcc: process.env.EMAIL_BCC_TO, subject, html }) : Promise.resolve()
+            ]);
+          }
+        } catch (mailErr) {
+          console.error('[payments] error notificando cancelación por timeout:', mailErr?.message || String(mailErr));
+        }
+      }
+      return { ok: true, cancelled };
     }
     return { ok: true, cancelled: false };
   } catch (err) {
@@ -98,17 +117,19 @@ router.post('/create-preference', async (req, res) => {
       }
     } catch (dbErr) {
       // No interrumpimos el flujo si la DB falla aquí
-      console.warn('[MP] no se pudo actualizar la orden con la preferencia:', dbErr?.message || dbErr);
+      console.error('[MP] no se pudo actualizar la orden con la preferencia:', dbErr?.message || dbErr);
     }
 
-    // Programar un timeout de 5 minutos para cancelar la orden si no hay pago
+    // Programar un timeout configurable (por defecto 10 minutos) para cancelar la orden si no hay pago.
+    // Usar la variable de entorno PAYMENT_WAIT_MINUTES (número en minutos).
     if (external_reference && resp.ok) {
+      const waitMin = Number(process.env.PAYMENT_WAIT_MINUTES || 10);
       const orderId = String(external_reference);
       setTimeout(async () => {
         try {
           await checkAndCancelIfUnpaid(orderId);
         } catch (_) { /* ignore */ }
-      }, 1 * 60 * 1000);
+      }, Math.max(1, waitMin) * 60 * 1000);
     }
 
     return res.status(resp.status).json(data);
@@ -228,7 +249,7 @@ router.post('/webhook', async (req, res) => {
         }
       }
     } catch (mailErr) {
-      console.warn('[MP webhook] error enviando correos:', mailErr?.message || String(mailErr));
+      console.error('[MP webhook] error enviando correos:', mailErr?.message || String(mailErr));
     }
 
     return res.sendStatus(200);
@@ -336,7 +357,7 @@ router.get('/status/:orderId', async (req, res) => {
     }
     // Enviar correos si se completó
     if (status === 'COMPLETED') {
-      try { await sendOrderEmails(orderId); } catch (mailErr) { console.warn('[MP status] error enviando correos:', mailErr?.message || String(mailErr)); }
+      try { await sendOrderEmails(orderId); } catch (mailErr) { console.error('[MP status] error enviando correos:', mailErr?.message || String(mailErr)); }
     }
 
     let dbUpdated = false;

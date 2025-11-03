@@ -9,13 +9,16 @@ import { authRequired } from './middleware/auth.js';
 const app = express();
 
 // Request logging (morgan provides concise logs)
-app.use(morgan('dev'));
+// Skip logging for the health-check endpoint to avoid noise from container healthchecks
+app.use(morgan('dev', {
+  skip: function (req, res) {
+    return req.path === '/api/health' || req.originalUrl === '/api/health';
+  }
+}));
 
-// Detailed request logger for debugging critical flows
-app.use((req, res, next) => {
-  console.log(`--> ${req.method} ${req.originalUrl} - query:`, req.query, 'body:', req.body ? req.body : '{}');
-  next();
-});
+// NOTE: removed detailed per-request debug logging to reduce noise in production.
+// Morgan already provides concise request logs. If you need full request dumps,
+// enable them locally or add a debug flag.
 
 app.use(express.json());
 app.use(
@@ -69,7 +72,7 @@ app.use((_req, res) => res.status(404).json({ message: 'Not Found' }));
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
-  console.log(`API escuchando en http://localhost:${PORT}`);
+  console.info(`API escuchando en http://localhost:${PORT}`);
 });
 
 process.on('unhandledRejection', (reason, p) => {

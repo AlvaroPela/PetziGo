@@ -63,7 +63,8 @@ router.get('/', [
   query('rating').optional().isFloat({ min: 1, max: 5 }),
   query('search').optional().trim()
 ], async (req, res) => {
-  console.log('[services] GET / - query:', req.query);
+  // debug: query parameters (demoted)
+  if (process.env.NODE_ENV !== 'production') console.debug('[services] GET / - query:', req.query);
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -94,7 +95,7 @@ router.get('/', [
               [idp]
             );
 
-            console.log('[services] owner request via idp - returning', Array.isArray(services) ? services.length : 0, 'services for provider', idp);
+            if (process.env.NODE_ENV !== 'production') console.debug('[services] owner request via idp - returning', Array.isArray(services) ? services.length : 0, 'services for provider', idp);
             return res.json({ services });
           }
         }
@@ -167,7 +168,7 @@ router.get('/', [
 
     const [services] = await pool.query(query, values);
 
-  console.log('[services] found', Array.isArray(services) ? services.length : 0, 'services');
+  console.info('[services] found', Array.isArray(services) ? services.length : 0, 'services');
   res.json({ services });
 
   } catch (err) {
@@ -180,7 +181,7 @@ router.get('/', [
 
 // Obtener un servicio específico
 router.get('/:id', async (req, res) => {
-  console.log('[services] GET /:id - id:', req.params.id);
+  if (process.env.NODE_ENV !== 'production') console.debug('[services] GET /:id - id:', req.params.id);
   try {
     const serviceId = req.params.id;
 
@@ -226,7 +227,36 @@ router.get('/:id', async (req, res) => {
       [service.provider_id]
     );
 
-    console.log('[services] returning service id:', serviceId);
+    // Si hay token de cliente, incluir su propia reseña aunque esté PENDING o REJECTED
+    try {
+      const token = req.headers.authorization?.split(' ')[1];
+      if (token) {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (decoded && decoded.id) {
+          const [[requester]] = await pool.query('SELECT id, role FROM users WHERE id = ?', [decoded.id]);
+          if (requester && requester.role === 'CLIENT') {
+            const [[myRev]] = await pool.query(
+              `SELECT r.rating, r.comment, r.created_at, u.name as client_name, r.status
+               FROM reviews r
+               INNER JOIN orders o ON o.id = r.order_id
+               INNER JOIN users u ON u.id = r.client_id
+               WHERE r.client_id = ? AND o.service_id = ? LIMIT 1`,
+              [requester.id, serviceId]
+            );
+            if (myRev && myRev.rating != null) {
+              // comprobar si ya está en la lista de reviews (por ejemplo si ya aprobada)
+              const exists = reviews.find(rv => rv.created_at && new Date(rv.created_at).getTime() === new Date(myRev.created_at).getTime() && rv.client_name === myRev.client_name);
+              if (!exists) reviews.unshift({ rating: myRev.rating, comment: myRev.comment, created_at: myRev.created_at, client_name: myRev.client_name });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // no bloquear la respuesta por errores de token
+      if (process.env.NODE_ENV !== 'production') console.debug('[services] token parse error', e && e.message);
+    }
+
+  console.info('[services] returning service id:', serviceId);
     res.json({ service: { ...service, reviews } });
 
   } catch (err) {
@@ -239,7 +269,8 @@ router.get('/:id', async (req, res) => {
 
 // Crear servicio (proveedor verificado)
 router.post('/', requireAuth, requireRole(['PROVIDER']), requireVerifiedProvider, serviceValidation, async (req, res) => {
-  console.log('[services] POST / - user:', req.user?.id, 'body:', req.body);
+  // demote detailed request body logging
+  if (process.env.NODE_ENV !== 'production') console.debug('[services] POST / - user:', req.user?.id);
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -267,8 +298,8 @@ router.post('/', requireAuth, requireRole(['PROVIDER']), requireVerifiedProvider
       [req.user.id, title, description, price, category, location_lat, location_lng, city || null]
     );
 
-    const insertId = result.insertId;
-    console.log('[services] created id:', insertId);
+  const insertId = result.insertId;
+  console.info('[services] created id:', insertId);
 
     // Recuperar el servicio completo para devolver al cliente (incluye location, image_url, provider info)
     const [[created]] = await pool.query(
@@ -292,7 +323,7 @@ router.post('/', requireAuth, requireRole(['PROVIDER']), requireVerifiedProvider
 
 // Actualizar servicio (propietario)
 router.put('/:id', requireAuth, requireResourceOwnership('service'), serviceValidation, async (req, res) => {
-  console.log('[services] PUT /:id - id:', req.params.id, 'user:', req.user?.id, 'body:', req.body);
+  if (process.env.NODE_ENV !== 'production') console.debug('[services] PUT /:id - id:', req.params.id, 'user:', req.user?.id);
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -309,7 +340,7 @@ router.put('/:id', requireAuth, requireResourceOwnership('service'), serviceVali
       [title, description, price, category, location_lat || null, location_lng || null, city || null, serviceId]
     );
 
-    console.log('[services] updated id:', serviceId);
+  console.info('[services] updated id:', serviceId);
 
     // Recuperar fila actualizada para devolverla completa al frontend
     const [[updated]] = await pool.query(
@@ -335,7 +366,7 @@ router.put('/:id', requireAuth, requireResourceOwnership('service'), serviceVali
 router.patch('/:id/status', requireAuth, requireResourceOwnership('service'), [
   body('active').isBoolean().withMessage('El estado debe ser verdadero o falso')
 ], async (req, res) => {
-  console.log('[services] PATCH /:id/status - id:', req.params.id, 'user:', req.user?.id, 'body:', req.body);
+  if (process.env.NODE_ENV !== 'production') console.debug('[services] PATCH /:id/status - id:', req.params.id, 'user:', req.user?.id);
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -350,7 +381,7 @@ router.patch('/:id/status', requireAuth, requireResourceOwnership('service'), [
       [active, serviceId]
     );
 
-    console.log('[services] status updated for id:', serviceId, 'active:', active);
+  console.info('[services] status updated for id:', serviceId, 'active:', active);
     res.json({ message: active ? 'Servicio activado exitosamente' : 'Servicio desactivado exitosamente' });
 
   } catch (err) {
@@ -363,10 +394,10 @@ router.patch('/:id/status', requireAuth, requireResourceOwnership('service'), [
 
 // Obtener servicios del proveedor autenticado
 router.get('/provider/mine', requireAuth, requireRole(['PROVIDER']), async (req, res) => {
-  console.log('[services] GET /provider/mine - user:', req.user?.id);
+  if (process.env.NODE_ENV !== 'production') console.debug('[services] GET /provider/mine - user:', req.user?.id);
   try {
     const [services] = await pool.query(`SELECT * FROM services WHERE provider_id = ? ORDER BY created_at DESC`, [req.user.id]);
-    console.log('[services] provider has', Array.isArray(services) ? services.length : 0, 'services');
+    console.info('[services] provider has', Array.isArray(services) ? services.length : 0, 'services');
     res.json({ services });
   } catch (err) {
     console.error('Error al obtener servicios del proveedor:', err);
@@ -377,7 +408,7 @@ router.get('/provider/mine', requireAuth, requireRole(['PROVIDER']), async (req,
 // Eliminar servicio -> marcar active = 2 (soft delete)
 // Requiere autenticación y que el usuario sea propietario (requireResourceOwnership('service'))
 router.delete('/:id', requireAuth, requireResourceOwnership('service'), async (req, res) => {
-  console.log('[services] DELETE /:id - id:', req.params.id, 'user:', req.user?.id);
+  if (process.env.NODE_ENV !== 'production') console.debug('[services] DELETE /:id - id:', req.params.id, 'user:', req.user?.id);
   try {
     const serviceId = req.params.id;
 
@@ -395,7 +426,7 @@ router.delete('/:id', requireAuth, requireResourceOwnership('service'), async (r
       return res.status(404).json({ message: 'Servicio no encontrado' });
     }
 
-    console.log('[services] soft-deleted id:', serviceId, 'by user:', req.user?.id);
+  console.info('[services] soft-deleted id:', serviceId, 'by user:', req.user?.id);
     res.json({ message: 'Servicio eliminado correctamente', id: serviceId });
 
   } catch (err) {

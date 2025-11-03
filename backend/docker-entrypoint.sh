@@ -34,5 +34,12 @@ if [ "$i" -ge "$MAX_RETRIES" ]; then
   echo "[entrypoint] Aviso: no se pudo crear el admin tras $MAX_RETRIES intentos. Continuando para iniciar el servidor..."
 fi
 
-echo "[entrypoint] Iniciando servidor: npm run dev"
-exec npm run dev
+echo "[entrypoint] Iniciando servidor"
+# If a command was passed (e.g. via docker-compose command override), run it.
+# Otherwise default to `npm run dev` (development server).
+if [ "$#" -gt 0 ]; then
+  echo "[entrypoint] ejecutando comando: $@"
+  exec "$@"
+else
+  exec npm run dev
+fi

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { body, query, validationResult } from 'express-validator';
 import { pool, withTransaction } from '../config/db.js';
+import { sendMail } from '../lib/mailer.js';
 import { requireAuth, requireRole, requireVerifiedProvider } from '../middleware/auth.js';
 import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
@@ -46,7 +47,8 @@ router.get('/', [
   query('radius').optional().isInt({ min: 1, max: 50 }) // radio en km
 ], async (req, res) => {
   try {
-    console.log('[providers] GET / - query:', req.query);
+  // demote noisy request-level logging
+  if (process.env.NODE_ENV !== 'production') console.debug('[providers] GET / - query:', req.query);
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
@@ -289,7 +291,7 @@ router.put('/profile', requireAuth, requireRole(['PROVIDER']), [
        WHERE user_id = ?`,
       [business_description, location_lat, location_lng, req.user.id]
     );
-    console.log('[providers] UPDATE result:', result);
+  console.info('[providers] UPDATE result:', result);
 
     // If no rows updated, insert a new profile (user may have been created without a provider_profiles row)
     if (result.affectedRows === 0) {
@@ -298,7 +300,7 @@ router.put('/profile', requireAuth, requireRole(['PROVIDER']), [
          VALUES (?, ?, ?, ?)`,
         [req.user.id, business_description, location_lat, location_lng]
       );
-      console.log('[providers] INSERT result:', ins);
+  console.info('[providers] INSERT result:', ins);
     }
 
     res.json({ message: 'Perfil de proveedor actualizado exitosamente' });
@@ -427,6 +429,21 @@ router.patch('/admin/verify/:id', requireAuth, requireRole(['ADMIN']), async (re
       [verified, providerId]
     );
 
+    // Notificar al proveedor por correo
+    try {
+      const [[user]] = await pool.query('SELECT id, name, email FROM users WHERE id = ? LIMIT 1', [providerId]);
+      if (user?.email) {
+        const subject = verified ? 'Tu cuenta de proveedor ha sido verificada' : 'Verificación de proveedor rechazada';
+        const html = verified
+          ? `<p>Hola ${user.name || ''},</p><p>Tu perfil de proveedor en PetziGo ha sido <strong>verificado</strong>. Ahora puedes publicar servicios y recibir pedidos.</p>`
+          : `<p>Hola ${user.name || ''},</p><p>Tu verificación de proveedor <strong>no fue aprobada</strong>. Revisa tus certificaciones y vuelve a enviarlas cuando las actualices.</p>`;
+        await sendMail({ to: user.email, bcc: process.env.EMAIL_BCC_TO, subject, html });
+      }
+    } catch (mailErr) {
+      // Mail sending errors are important to surface
+      console.error('[providers] error notificando verificación:', mailErr?.message || String(mailErr));
+    }
+
     res.json({
       message: verified ? 'Proveedor verificado exitosamente' : 'Verificación de proveedor rechazada'
     });
@@ -465,6 +482,21 @@ router.patch('/admin/certifications/:id', requireAuth, requireRole(['ADMIN']), [
        WHERE id = ?`,
       [status, observations, certificationId]
     );
+
+    // Notificar al proveedor sobre el resultado de la certificación
+    try {
+      const [[cert]] = await pool.query('SELECT provider_id, document_name FROM certifications WHERE id = ? LIMIT 1', [certificationId]);
+      if (cert && cert.provider_id) {
+        const [[user]] = await pool.query('SELECT id, name, email FROM users WHERE id = ? LIMIT 1', [cert.provider_id]);
+        if (user?.email) {
+          const subject = `Certificación ${status === 'APPROVED' ? 'aprobada' : 'rechazada'}: ${cert.document_name || ''}`;
+          const html = `<p>Hola ${user.name || ''},</p><p>La certificación <strong>${cert.document_name || ''}</strong> fue <strong>${status}</strong>.</p>${observations ? `<p>Observaciones del admin: ${observations}</p>` : ''}`;
+          await sendMail({ to: user.email, bcc: process.env.EMAIL_BCC_TO, subject, html });
+        }
+      }
+    } catch (mailErr) {
+      console.error('[providers] error notificando resultado de certificación:', mailErr?.message || String(mailErr));
+    }
 
     res.json({
       message: 'Estado de certificación actualizado exitosamente'

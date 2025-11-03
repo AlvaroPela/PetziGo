@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { api, assetUrl } from '../../lib/api';
 import { Input, Button } from '../../components/FormComponents';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { petIcon } from '../../components/Map';
 
 const DEFAULT_CENTER = [4.6097, -74.0817];
 
@@ -141,6 +142,7 @@ const ProviderProfile = () => {
               <MapContainer center={[form.location.lat || DEFAULT_CENTER[0], form.location.lng || DEFAULT_CENTER[1]]} zoom={13} style={{ height: '100%', width: '100%' }}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
                 <Marker
+                  icon={petIcon}
                   draggable={true}
                   position={[form.location.lat, form.location.lng]}
                   eventHandlers={{

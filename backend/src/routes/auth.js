@@ -3,6 +3,7 @@ import { body, validationResult } from 'express-validator';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { pool, withTransaction } from '../config/db.js';
+import { sendMail } from '../lib/mailer.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
@@ -86,6 +87,14 @@ router.post('/register', registerValidation, async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
+
+    // Enviar correo de bienvenida
+    try {
+      const welcomeHtml = `<p>Hola ${String(name)},</p><p>¡Bienvenido a PetziGo! Tu cuenta ha sido creada correctamente.</p><p>Si eres proveedor, completa tu perfil y sube tus certificaciones para que te podamos verificar.</p>`;
+      await sendMail({ to: String(email), bcc: process.env.EMAIL_BCC_TO, subject: 'Bienvenido a PetziGo', html: welcomeHtml });
+    } catch (mailErr) {
+      console.error('[auth] error enviando correo de bienvenida:', mailErr?.message || String(mailErr));
+    }
 
     res.status(201).json({
       message: 'Usuario registrado exitosamente',

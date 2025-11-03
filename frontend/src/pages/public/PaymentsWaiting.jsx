@@ -16,7 +16,8 @@ const PaymentsWaiting = () => {
   const [info, setInfo] = useState(null);
   const [checking, setChecking] = useState(false);
   const [popupClosed, setPopupClosed] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(600); // segundos (10 minutos)
+  const DEFAULT_WAIT_MINUTES = Number(import.meta.env.VITE_PAYMENT_WAIT_MINUTES || 10);
+  const [timeLeft, setTimeLeft] = useState(DEFAULT_WAIT_MINUTES * 60); // segundos
   const [timeoutHandled, setTimeoutHandled] = useState(false);
   const storageKey = orderId ? `mp_payment_result_${orderId}` : null;
 
@@ -51,8 +52,9 @@ const PaymentsWaiting = () => {
     const key = `mp_wait_deadline_${orderId}`;
     let deadline = parseInt(localStorage.getItem(key) || '0', 10);
     if (!deadline || Number.isNaN(deadline)) {
-      // 10 minutos
-      deadline = Date.now() + 10 * 60 * 1000;
+      // configurable via VITE_PAYMENT_WAIT_MINUTES (minutos)
+      const waitMin = Number(import.meta.env.VITE_PAYMENT_WAIT_MINUTES || DEFAULT_WAIT_MINUTES);
+      deadline = Date.now() + Math.max(1, waitMin) * 60 * 1000;
       try { localStorage.setItem(key, String(deadline)); } catch (e) { /* ignore */ }
     }
     const interval = setInterval(() => {

@@ -108,7 +108,8 @@ const ProductPurchase = () => {
           window.__mpPopupRef = popup;
           window.__mpCurrentOrderId = String(orderRes.id);
           localStorage.setItem(`mp_init_point_${orderRes.id}`, redirectUrl);
-            const deadline = Date.now() + 10 * 60 * 1000; // 10 minutos
+          const waitMin = Number(import.meta.env.VITE_PAYMENT_WAIT_MINUTES || 10);
+          const deadline = Date.now() + Math.max(1, waitMin) * 60 * 1000;
           localStorage.setItem(`mp_wait_deadline_${orderRes.id}`, String(deadline));
         } catch { /* ignore */ }
       } catch (openErr) {

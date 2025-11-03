@@ -62,6 +62,36 @@ export const authRequired = (roles = []) => {
   return requireAuth;
 };
 
+// Middleware opcional: intenta autenticar si viene token, pero no obliga.
+export const optionalAuth = async (req, _res, next) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      req.user = null;
+      return next();
+    }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const [users] = await pool.query(
+      `SELECT u.id, u.email, u.role, u.status,
+        CASE WHEN u.role = 'PROVIDER' THEN pp.verified ELSE NULL END as provider_verified
+       FROM users u
+       LEFT JOIN provider_profiles pp ON u.id = pp.user_id
+       WHERE u.id = ?`,
+      [decoded.id]
+    );
+    if (!users.length || users[0].status === 'INACTIVE') {
+      req.user = null;
+      return next();
+    }
+    req.user = users[0];
+    return next();
+  } catch (err) {
+    // No forzamos error: dejamos req.user = null y continuamos
+    req.user = null;
+    return next();
+  }
+};
+
 // Middleware para verificación de roles
 export const requireRole = (roles) => {
   return (req, res, next) => {

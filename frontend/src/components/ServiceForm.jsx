@@ -3,6 +3,7 @@ import { api, assetUrl } from "../lib/api";
 import { Input, Select, Textarea, Button } from "./FormComponents";
 import { useAuth } from "../auth/AuthProvider";
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { petIcon } from './Map';
 import 'leaflet/dist/leaflet.css';
 
 function MapClickHandler({ setLocation, setCity, setGeoLoading }) {
@@ -177,7 +178,7 @@ export default function ServiceForm({ initial = null, onSaved, onCancel }) {
 								attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 							/>
 							{location.lat && location.lng && (
-								<Marker position={[Number(location.lat), Number(location.lng)]} />
+								<Marker icon={petIcon} position={[Number(location.lat), Number(location.lng)]} />
 							)}
 							{
 								// componente para capturar clicks y colocar marcador (también intenta obtener la ciudad)
