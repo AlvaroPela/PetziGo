@@ -71,8 +71,9 @@ app.use((err, req, res, next) => {
 app.use((_req, res) => res.status(404).json({ message: 'Not Found' }));
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.info(`API escuchando en http://localhost:${PORT}`);
+// Bind explicitly to 0.0.0.0 so other containers in the Docker network can reach the service.
+app.listen(PORT, '0.0.0.0', () => {
+  console.info(`API escuchando en http://0.0.0.0:${PORT}`);
 });
 
 process.on('unhandledRejection', (reason, p) => {

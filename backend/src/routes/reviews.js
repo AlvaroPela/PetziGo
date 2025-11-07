@@ -53,7 +53,12 @@ router.get('/', optionalAuth, [
 export default router;
 
 // Crear reseña (solo CLIENTes que hayan completado/recibido el pedido)
-router.post('/', authRequired(['CLIENT']), [
+// Permitir crear reseñas por cualquier usuario autenticado excepto PROVIDER/ADMIN.
+// Se mantiene la compatibilidad con clientes que tengan una orden completada, pero
+// si no existe una orden completada se creará una orden "placeholder" para poder
+// asociar la reseña (evita cambiar el esquema de la BD). Proveedores y admins
+// no pueden crear reseñas.
+router.post('/', authRequired(), [
   body('itemType').isIn(['SERVICE','PRODUCT']).withMessage('itemType inválido'),
   body('itemId').isInt({ min: 1 }).withMessage('itemId inválido'),
   body('rating').isInt({ min: 1, max: 5 }).withMessage('rating debe ser 1-5'),
@@ -66,25 +71,53 @@ router.post('/', authRequired(['CLIENT']), [
   const userId = req.user.id;
 
   try {
+    // Prohibir que proveedores o admins creen reseñas
+    if (req.user && (req.user.role === 'PROVIDER' || req.user.role === 'ADMIN')) {
+      return res.status(403).json({ message: 'Proveedores y administradores no pueden crear reseñas' });
+    }
+
     // Buscar una orden del cliente para ese item que esté completada/delivered
     const [[order]] = await pool.query(
       `SELECT id, provider_id, status FROM orders WHERE user_id = ? AND item_type = ? AND ${itemType === 'SERVICE' ? 'service_id' : 'product_id'} = ? AND status IN ('DELIVERED','COMPLETED') LIMIT 1`,
       [userId, itemType, itemId]
     );
-    if (!order) return res.status(403).json({ message: 'No se encontró una orden completada para este item por este cliente' });
+
+    // Si no existe una orden completada, creamos una orden placeholder para poder
+    // asociar la reseña con un order_id (no queremos cambiar la estructura de la BD ahora).
+    // Esto evita que la inserción de la reseña falle por la restricción NOT NULL/FK.
+    let usedOrder = order;
+    if (!usedOrder) {
+      // Obtener provider_id desde el servicio o producto
+      const [[itemRow]] = await pool.query(itemType === 'SERVICE'
+        ? 'SELECT provider_id FROM services WHERE id = ? LIMIT 1'
+        : 'SELECT provider_id FROM products WHERE id = ? LIMIT 1',
+        [itemId]
+      );
+      if (!itemRow) return res.status(404).json({ message: 'Item no encontrado' });
+      const providerId = itemRow.provider_id;
+
+      // Crear orden mínima/placeholder
+      const [insOrder] = await pool.query(
+        `INSERT INTO orders (user_id, provider_id, item_type, ${itemType === 'SERVICE' ? 'service_id' : 'product_id'}, quantity, total_amount, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 1, 0, 'CREATED', NOW(), NOW())`,
+        [userId, providerId, itemType, itemId]
+      );
+      const [[newOrderRow]] = await pool.query('SELECT id, provider_id FROM orders WHERE id = ? LIMIT 1', [insOrder.insertId]);
+      usedOrder = newOrderRow;
+    }
 
     // Verificar que no exista reseña previa para esta orden
-    const [existing] = await pool.query('SELECT id FROM reviews WHERE order_id = ? AND client_id = ? LIMIT 1', [order.id, userId]);
+    const [existing] = await pool.query('SELECT id FROM reviews WHERE order_id = ? AND client_id = ? LIMIT 1', [usedOrder.id, userId]);
     if (existing && existing.length > 0) return res.status(409).json({ message: 'Ya existe una reseña para esta orden' });
 
   // Insertar reseña: comportamiento de moderación configurable por env REVIEW_AUTO_APPROVE
   // Por defecto las reseñas se auto-aprueban a menos que REVIEW_AUTO_APPROVE='false'
   const autoApprove = (process.env.REVIEW_AUTO_APPROVE || 'true') !== 'false';
   const status = autoApprove ? 'APPROVED' : 'PENDING';
-  const [ins] = await pool.query('INSERT INTO reviews (order_id, client_id, provider_id, rating, comment, status, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())', [order.id, userId, order.provider_id, rating, comment || null, status]);
+  const [ins] = await pool.query('INSERT INTO reviews (order_id, client_id, provider_id, rating, comment, status, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())', [usedOrder.id, userId, usedOrder.provider_id, rating, comment || null, status]);
 
   // Recalcular promedio sólo si quedó aprobada inmediatamente
-  if (status === 'APPROVED') await recalcProviderRating(order.provider_id);
+  if (status === 'APPROVED') await recalcProviderRating(usedOrder.provider_id);
 
     const [[newRow]] = await pool.query('SELECT r.rating, r.comment, r.created_at, u.name as client_name FROM reviews r INNER JOIN users u ON u.id = r.client_id WHERE r.id = ? LIMIT 1', [ins.insertId]);
     return res.status(201).json({ review: newRow });

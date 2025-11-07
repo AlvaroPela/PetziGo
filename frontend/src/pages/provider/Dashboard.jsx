@@ -244,7 +244,7 @@ const ProviderDashboard = () => {
                           <td className="px-3 py-2 text-sm text-slate-600">{(o.serviceDate ? new Date(o.serviceDate).toLocaleString() : (o.requestedAt ? new Date(o.requestedAt).toLocaleString() : '—'))}</td>
                           <td className="px-3 py-2 text-[11px] text-slate-600">{(o.status||'').toUpperCase()}</td>
                           <td className="px-3 py-2 text-right">
-                            <div className="flex justify-end gap-2">
+                            <div className="flex flex-wrap justify-end gap-2">
                               <button onClick={() => patchOrderStatus(o.id, 'ACCEPTED')} className="text-xs px-2 py-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100">Aceptar</button>
                               <button onClick={() => patchOrderStatus(o.id, 'CANCELLED')} className="text-xs px-2 py-1 rounded bg-rose-50 text-rose-700 hover:bg-rose-100">Rechazar</button>
                               {(o.buyerName || o.buyerEmail || o.buyerPhone) && (
@@ -268,7 +268,7 @@ const ProviderDashboard = () => {
                 </div>
 
                 {/* En curso y completados */}
-                <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+                <div className="bg-white rounded-lg shadow-sm overflow-x-auto">
                   <div className="px-3 py-2 bg-slate-50 text-sm font-medium">En curso y completados</div>
                   <table className="min-w-full">
                     <thead className="bg-slate-50">
@@ -302,7 +302,7 @@ const ProviderDashboard = () => {
                             {((o.status||'').toUpperCase() === 'IN_PROGRESS') && (
                               <button onClick={() => patchOrderStatus(o.id, 'COMPLETED')} className="text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100">Finalizar servicio</button>
                             )}
-                            <div className="mt-2 flex justify-end gap-2">
+                            <div className="mt-2 flex flex-wrap justify-end gap-2">
                               {/* Mostrar cliente / mascota si existen (fallbacks defensivos) */}
                               {(o.buyerName || o.buyerEmail || o.buyerPhone) && (
                                 <button onClick={() => setClientModal({ open: true, data: o })} className="text-xs px-2 py-1 rounded bg-slate-50 text-slate-700 hover:bg-slate-100">Ver cliente</button>

@@ -32,8 +32,10 @@ services:
       - ./backend/.env
     environment:
       - NODE_ENV=${NODE_ENV:-development}
-      - DB_HOST=db
-      - DB_PORT=3306
+      - FRONTEND_URL=https://cataphyllary-lyotropic-jaxton.ngrok-free.dev
+      - BACKEND_URL=https://cataphyllary-lyotropic-jaxton.ngrok-free.dev
+      #- DB_HOST=db
+      #- DB_PORT=3306
     # backend no se expone directamente: las peticiones externas llegan a través del frontend (nginx)
     depends_on:
       db:
@@ -41,7 +43,9 @@ services:
     volumes:
       - ./backend:/usr/src/app:cached
       - /usr/src/app/node_modules
-      - uploads:/usr/src/app/uploads
+      # Persistir archivos subidos (certificaciones, mascotas, productos, servicios)
+      # Usamos un bind mount al host para que los archivos no se pierdan al reiniciar contenedores.
+      - ./backend/uploads:/usr/src/app/uploads
     command: sh -c "npm install --no-audit --no-fund && npm run dev"
     networks:
       - petzigo-net
@@ -86,6 +90,8 @@ services:
         VITE_API_BASE: /api
     environment:
       - NODE_ENV=${NODE_ENV:-production}
+      # Exponer la URL base que puede usarse en los builds o runtime si es necesario
+      - FRONTEND_URL=https://cataphyllary-lyotropic-jaxton.ngrok-free.dev
     ports:
       - "${FRONTEND_PORT:-80}:80"
     depends_on:
@@ -103,8 +109,7 @@ services:
 volumes:
   db_data:
     driver: local
-  uploads:
-    driver: local
+  # Nota: eliminamos el volumen named 'uploads' en favor de un bind mount para persistencia
 
 networks:
   petzigo-net:

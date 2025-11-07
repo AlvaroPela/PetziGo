@@ -78,6 +78,44 @@ export async function sendNow({ to, bcc, subject, html, text, replyTo }) {
 
     // Try MailerSend if key present
     const msApiKey = process.env.MAILERSEND_API_KEY || process.env.API_KEY;
+    // Try Mailgun if configured (prefer Mailgun as primary provider when present)
+    const mgApiKey = (process.env.MAILGUN_API_KEY || '').trim();
+    const mgDomain = (process.env.MAILGUN_DOMAIN || '').trim();
+    const mgBase = (process.env.MAILGUN_BASE_URL || '').trim() || undefined;
+    if (mgApiKey && mgDomain) {
+      try {
+        // Use application/x-www-form-urlencoded via URLSearchParams to call Mailgun HTTP API.
+        const fromEmail = process.env.SMTP_FROM || process.env.MAILERSEND_FROM_EMAIL || `no-reply@${mgDomain}`;
+        const params = new URLSearchParams();
+        params.append('from', fromEmail);
+        params.append('to', (effectiveTo || []).join(','));
+        params.append('subject', subject || '(sin asunto)');
+        if (text) params.append('text', text);
+        if (html) params.append('html', html);
+        if (bcc) params.append('bcc', Array.isArray(bcc) ? bcc.join(',') : String(bcc));
+        if (replyTo) params.append('h:Reply-To', replyTo);
+
+        const base = mgBase || 'https://api.mailgun.net';
+        const url = `${base.replace(/\/$/, '')}/v3/${mgDomain}/messages`;
+        const auth = Buffer.from(`api:${mgApiKey}`).toString('base64');
+
+        // prefer global fetch if available, else use node-fetch
+        let fetchFn = globalThis.fetch;
+        if (!fetchFn) {
+          try { fetchFn = (await import('node-fetch')).default; } catch (e) { fetchFn = null; }
+        }
+        if (!fetchFn) throw new Error('fetch no disponible para Mailgun; instala node-fetch o usa SMTP');
+
+        const resp = await fetchFn(url, { method: 'POST', body: params.toString(), headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' } });
+        if (!resp.ok) {
+          const body = await resp.text().catch(() => '<no body>');
+          throw new Error(`Mailgun API error ${resp.status}: ${body}`);
+        }
+        return { ok: true, mode: 'mailgun' };
+      } catch (err) {
+        console.error('[mailer] Mailgun falló, intentando siguientes transportes:', err?.message || String(err));
+      }
+    }
     if (msApiKey) {
       try {
         const ms = await import('mailersend');
